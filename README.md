@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="agent_core/auto_use.png" alt="Auto Use Logo" width="120"/>
+  <img src="auto_use.png" alt="Auto Use Logo" width="120"/>
   
   # Auto Use
   
