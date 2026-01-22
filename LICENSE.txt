@@ -1,7 +1,7 @@
 AUTOUSE PROPRIETARY LICENSE
 (Proprietary and Confidential — All Rights Reserved)
 
-Copyright (c) 2026 Autouse Company
+Copyright (c) 2026 Autouse
 Author: Ashish Yadav
 Contact: autouse.ai@outlook.com
 
