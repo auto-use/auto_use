@@ -1,14 +1,14 @@
 AUTOUSE PROPRIETARY LICENSE
 (Proprietary and Confidential — All Rights Reserved)
 
-Copyright (c) 2026 Autouse
+Copyright (c) 2026 Ashish Yadav
 Author: Ashish Yadav
 Contact: autouse.ai@outlook.com
 
 NOTICE
 This repository and its contents are proprietary and confidential. The Software is not
 open source. No rights are granted to any person or entity except under a separate
-written agreement signed by Autouse Company.
+written agreement signed by Ashish Yadav ("Licensor").
 
 1. Definitions
    "Software" means all source code, object code, documentation, designs, diagrams,
@@ -16,20 +16,20 @@ written agreement signed by Autouse Company.
    updates, modifications, or derivative works.
 
 2. Ownership
-   The Software is owned by Autouse Company and is protected by copyright and other
+   The Software is owned by the Licensor and is protected by copyright and other
    intellectual property laws. This license does not grant any ownership rights.
 
 3. No License Grant
    No permission is granted to use, copy, modify, merge, publish, distribute, sublicense,
    sell, rent, lease, lend, host, or otherwise exploit the Software, in whole or in part,
-   except as expressly permitted in a separate written agreement signed by Autouse Company.
+   except as expressly permitted in a separate written agreement signed by the Licensor.
 
 4. Confidentiality
    The Software is confidential and proprietary. You must not disclose, share, or make the
-   Software available to any third party without prior written permission from Autouse Company.
+   Software available to any third party without prior written permission from the Licensor.
 
 5. Reservation of Rights
-   All rights not expressly granted are reserved by Autouse Company.
+   All rights not expressly granted are reserved by the Licensor.
 
 6. Termination
    Any unauthorised access, use, copying, modification, or disclosure of the Software is
@@ -42,7 +42,7 @@ written agreement signed by Autouse Company.
    PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
 
 8. Limitation of Liability
-   TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL AUTOUSE COMPANY OR THE AUTHOR BE
+   TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT SHALL THE LICENSOR OR THE AUTHOR BE
    LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT,
    OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
    DEALINGS IN THE SOFTWARE.
