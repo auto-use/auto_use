@@ -3,7 +3,7 @@
   
   # Auto Use
   
-  **🤖 AI-Powered Windows Desktop Automation Framework**
+  **🤖 Agent Worker**
   
   Control your entire OS with natural language. Browser automation, coding tasks, file management — all powered by vision-language models.
   
