@@ -1,18 +1,18 @@
+<div align="center">
+  <img src="auto_use.png" alt="Auto Use Logo" width="120"/>
 
+  # Auto Use
 
-# Auto Use
-
- One Click. Millions of Possibilities.
+  **One Click. Millions of Possibilities.**
 
   [Features](#-features) • [Agents](#-agents) • [Models](#-supported-models) • [Requirements](#-requirements)
-
-
+</div>
 
 ---
 
 ## 🎬 Demo
 
-
+<video src="demo.mp4" controls autoplay loop muted playsinline width="100%"></video>
 
 ---
 
