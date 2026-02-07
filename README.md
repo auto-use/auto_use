@@ -14,6 +14,16 @@
 
 <img src="demo.gif" alt="Auto Use Demo" width="100%"/>
 
+<p align="center">
+  <a href="https://drive.google.com/file/d/13FrZzM-dsyxSxlFZwmbfMnHmmpOp3jxx/view?usp=sharing"><img src="https://img.shields.io/badge/Watch_Demo-4285F4?style=for-the-badge&logo=google-drive&logoColor=white" alt="Demo"/></a>
+  &nbsp;&nbsp;
+  <a href="https://drive.google.com/file/d/1cPFu5SHA0udp9ErLandowRcaYIqfM30H/view?usp=sharing"><img src="https://img.shields.io/badge/Coding_Task_Demo-34A853?style=for-the-badge&logo=google-drive&logoColor=white" alt="Coding Task Demo"/></a>
+</p>
+
+<p align="center">
+  <em>Second link: full coding task demo for Y Combinator reviewers</em>
+</p>
+
 ---
 
 ## ✨ Features
