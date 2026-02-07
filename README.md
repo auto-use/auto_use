@@ -15,7 +15,7 @@
 <img src="demo.gif" alt="Auto Use Demo" width="100%"/>
 
 <p align="center">
-  <strong>👉 Click here to watch full video demos 👈</strong>
+  <strong>👇 Click here to watch full video demos</strong>
 </p>
 
 <p align="center">
