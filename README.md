@@ -61,59 +61,82 @@ Choose from 16+ AI models across OpenRouter, Groq, and OpenAI. Switch providers 
 
 ---
 
-## 🤖 Agents
 
-### 🖥️ GUI Agent
+## 🎬 Demo
 
-The main automation engine. Uses computer vision to interact with any Windows application.
+<img src="demo.gif" alt="Auto Use Demo" width="100%"/>
 
-- **See** — Captures annotated screenshots with element detection
-- **Understand** — Analyzes UI using vision-language models
-- **Act** — Clicks, types, scrolls, and uses keyboard shortcuts
-- **Verify** — Confirms actions completed before moving on
+<p align="center">
+  <strong>👇 Click here to watch full video demos</strong>
+</p>
 
-```
-"Open Chrome, go to YouTube, and search for Python tutorials"
-```
+<p align="center">
+  <a href="https://drive.google.com/file/d/13FrZzM-dsyxSxlFZwmbfMnHmmpOp3jxx/view?usp=sharing"><img src="https://img.shields.io/badge/▶_OS_+_Coding_Demo-4285F4?style=for-the-badge&logo=google-drive&logoColor=white" alt="OS + Coding Demo"/></a>
+  &nbsp;&nbsp;
+  <a href="https://drive.google.com/file/d/1cPFu5SHA0udp9ErLandowRcaYIqfM30H/view?usp=sharing"><img src="https://img.shields.io/badge/▶_Coding_Task_Demo-34A853?style=for-the-badge&logo=google-drive&logoColor=white" alt="Coding Task Demo"/></a>
+</p>
 
-### 💻 CLI Agent
+---
 
-PowerShell-powered terminal agent for command-line tasks.
+## ✨ Features
 
-- Execute shell commands
-- Navigate file systems
-- Run scripts and programs
-- Manage system operations
+### 🕷️ Undetectable Web Scraping
 
-```
-"Check disk space and clean up temp files"
-```
+Scrape any website that traditional CDP-based tools can't touch. Auto Use drives a real browser through pure vision and sophisticated UI scanning — no Chrome DevTools Protocol, no debugging ports, no injected scripts. The browser runs exactly as a human would use it, making detection virtually impossible while keeping your security fully intact.
 
-### 👨‍💻 Coding Agent
+### 🔍 Human-Like Screen Perception
 
-Your AI programming assistant that writes, edits, and debugs code.
+Auto Use sees your screen the way you do. It captures screenshots, maps the depth and layering of every window, and identifies which icons, folders, options, and text are visible — and *how much* of each is visible. This awareness lets the agent make precise, context-driven decisions about where to click, scroll, or type to complete your task.
 
-- Create new files with proper structure
-- Edit existing code with precision
-- Debug and fix errors
-- Run and test programs
+### 🧠 Collaborative Multi-Agent Framework
 
-```
-"Create a Python Flask API with user authentication"
-```
+Multiple specialized agents operate independently yet coordinate seamlessly when the task demands it, sharing context in real time. The framework intelligently decides which combination of agents can accomplish a task fastest: a GUI click here, a PowerShell command there, a quick web lookup in between — all orchestrated automatically.
 
-### 🌐 Web Agent
+### 📚 Adaptive Context Intelligence
 
-Real-time information retrieval from the internet.
+Agents are environment-aware. They detect which application or workflow they're operating in and pull relevant efficiency guidelines on the fly. Inject your own expertise — whether it's app-specific shortcuts, internal processes, or operational playbooks — and the system absorbs it instantly, sharpening its behavior to make every task faster and more seamless.
 
-- Search multiple sources automatically
-- Extract and summarize data
-- Save findings to milestones
-- Integrate results into ongoing tasks
+### 🔒 Sandboxed Execution
 
-```
-"Find the latest NVIDIA stock price and quarterly revenue"
-```
+The CLI agent is confined to an isolated sandbox — all coding and shell tasks run strictly inside it and cannot touch critical system paths like `C:\Windows`. Your OS stays protected while the agent builds, tests, and executes code freely within its boundaries.
+
+### 💾 3-Stage Memory Management
+
+A sophisticated three-stage memory system lets agents carry context well beyond a single context window. Long-running, multi-step sessions stay on track without information loss — intelligent chunking, real-time context optimization, and priority-based compression all happen seamlessly in the background with zero delay, so the agent always knows exactly where it is and what's next.
+
+### ⚡ Kernel-Level Interaction
+
+The GUI agent interfaces at the OS kernel level using low-level input drivers, enabling it to operate smoothly even in restricted scenarios like User Account Control (UAC) dialogs and elevated prompts that block conventional automation tools.
+
+### 🎛️ Multi-Provider Support
+
+Choose from 16+ AI models across OpenRouter, Groq, and OpenAI. Switch providers based on speed, cost, or capability needs.
+
+---
+
+## 🤖 What You Can Ask
+
+Just tell Auto Use what you need — it figures out the rest.
+
+### 🖥️ Desktop Automation
+> *"Open Chrome, go to YouTube, and search for Python tutorials"*
+
+Interacts with any Windows application through vision — clicks, types, scrolls, navigates menus, and verifies every step before moving on.
+
+### 💻 Terminal & System Tasks
+> *"Check disk space and clean up temp files"*
+
+Executes PowerShell commands, navigates file systems, manages processes, and handles system operations — all inside a secure sandbox.
+
+### 👨‍💻 Code Generation & Editing
+> *"Create a Python Flask API with user authentication"*
+
+Writes new files, edits existing code with precision, debugs errors, runs tests, and cleans up — without ever leaving the sandbox.
+
+### 🌐 Real-Time Web Lookup
+> *"Find the latest NVIDIA stock price and quarterly revenue"*
+
+Searches multiple sources, extracts and summarizes data in real time, and feeds findings directly into the ongoing task.
 
 ---
 
