@@ -12,7 +12,7 @@
 
 ## 🎬 Demo
 
-<video src="demo.gif" controls autoplay loop muted playsinline width="100%"></video>
+<img src="demo.gif" alt="Auto Use Demo" width="100%"/>
 
 ---
 
