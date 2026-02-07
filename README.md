@@ -24,31 +24,38 @@
   <a href="https://drive.google.com/file/d/1cPFu5SHA0udp9ErLandowRcaYIqfM30H/view?usp=sharing"><img src="https://img.shields.io/badge/▶_Coding_Task_Demo-34A853?style=for-the-badge&logo=google-drive&logoColor=white" alt="Coding Task Demo"/></a>
 </p>
 
----
 
 ## ✨ Features
 
-### 🔍 Vision-Based Automation
+### 🕷️ Undetectable Web Scraping
 
-Auto Use sees your screen like a human does. It captures screenshots, identifies UI elements with orange bounding boxes, and understands exactly where to click, type, or scroll.
+Scrape any website that traditional CDP-based tools can't touch. Auto Use drives a real browser through pure vision and sophisticated UI scanning — no Chrome DevTools Protocol, no debugging ports, no injected scripts. The browser runs exactly as a human would use it, making detection virtually impossible while keeping your security fully intact.
 
-### 🧠 Multi-Agent System
+### 🔍 Human-Like Screen Perception
 
-Four specialized agents working together — GUI automation, CLI commands, web search, and coding tasks. Each agent is optimized for its domain.
+Auto Use sees your screen the way you do. It captures screenshots, maps the depth and layering of every window, and identifies which icons, folders, options, and text are visible — and *how much* of each is visible. This awareness lets the agent make precise, context-driven decisions about where to click, scroll, or type to complete your task.
 
-### 📚 Knowledge System
+### 🧠 Collaborative Multi-Agent Framework
 
-Add your personal domain/application context easily. Smart reinforcement system to understand your domain/application better — fine-tune just with prompts.
+Four specialized agents — GUI, CLI, Web, and Coding — work as a single coordinated team, sharing context in real time. The framework intelligently decides which combination of agents can accomplish a task fastest: a GUI click here, a PowerShell command there, a quick web lookup in between — all orchestrated automatically.
 
-### 🔒 Secure Sandbox Execution
+### 📚 Adaptive Context Intelligence
 
-All code execution happens in an isolated sandbox environment. Your system stays protected while the agent works.
+Agents are environment-aware. They detect which application or workflow they're operating in and pull relevant efficiency guidelines on the fly. Inject your own expertise — whether it's app-specific shortcuts, internal processes, or operational playbooks — and the system absorbs it instantly, sharpening its behavior to make every task faster and more seamless.
 
-### 💾 Intelligent Memory
+### 🔒 Sandboxed Execution
 
-3 state memory system for long running sessions. Maintains context across multi-step tasks and never loses track of complex workflows.
+The CLI agent is confined to an isolated sandbox — all coding and shell tasks run strictly inside it and cannot touch critical system paths like `C:\Windows`. Your OS stays protected while the agent builds, tests, and executes code freely within its boundaries.
 
-### ⚡ Multi-Provider Support
+### 💾 3-Stage Memory Management
+
+A sophisticated three-stage memory system lets agents carry context well beyond a single context window. Long-running, multi-step sessions stay on track without information loss — intelligent chunking, real-time context optimization, and priority-based compression all happen seamlessly in the background with zero delay, so the agent always knows exactly where it is and what's next.
+
+### ⚡ Kernel-Level Interaction
+
+The GUI agent interfaces at the OS kernel level using low-level input drivers, enabling it to operate smoothly even in restricted scenarios like User Account Control (UAC) dialogs and elevated prompts that block conventional automation tools.
+
+### 🎛️ Multi-Provider Support
 
 Choose from 16+ AI models across OpenRouter, Groq, and OpenAI. Switch providers based on speed, cost, or capability needs.
 
@@ -236,5 +243,3 @@ Direct access to OpenAI's latest models.
 | **Windows**      | ✅ Supported    |
 | **macOS**        | 🚧 Coming Soon |
 | **Linux**        | 🚧 Coming Soon |
-
-
