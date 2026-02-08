@@ -10,7 +10,7 @@
 
 ---
 
-## 🎬 Demo
+
 
 <img src="demo.gif" alt="Auto Use Demo" width="100%"/>
 
