@@ -197,7 +197,7 @@ Direct access to OpenAI's latest models.
 | Feature                    | Auto Use | Others  |
 | -------------------------- | -------- | ------- |
 | Multi-agent system         | ✅        | ❌       |
-| Domain knowledge injection | ✅        | ❌       |
+| knowledge system           | ✅        | ❌       |
 | 16+ model support          | ✅        | Limited |
 | Vision-based automation    | ✅        | ✅       |
 | Coding agent               | ✅        | ❌       |
