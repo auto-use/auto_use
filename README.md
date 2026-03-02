@@ -61,7 +61,7 @@ The GUI agent interfaces at the OS kernel level using low-level input drivers, e
 
 ### 🎛️ Multi-Provider Support
 
-Choose from 16+ AI models across OpenRouter, Groq, and OpenAI. Switch providers based on speed, cost, or capability needs.
+Choose from 20+ AI models across OpenRouter, Groq, OpenAI, and Anthropic. Switch providers based on speed, cost, or capability needs.
 
 ---
 
@@ -107,7 +107,7 @@ Searches multiple sources, extracts and summarizes data in real time, and feeds 
 
 ## 🧠 Supported Models
 
-Auto Use supports **16+ vision-language models** across 3 providers.
+Auto Use supports **20+ vision-language models** across 4 providers.
 
 ### OpenRouter
 
@@ -121,10 +121,12 @@ Access multiple AI providers through a single API.
 | **Gemini 2.5 Flash Lite**| `google/gemini-2.5-flash-lite`  | ✅         |
 | **Gemini 3 Pro Preview** | `google/gemini-3-pro-preview`   | ✅         |
 | **Gemini 3 Flash Preview**| `google/gemini-3-flash-preview` | ✅         |
+| **Gemini 3.1 Pro**       | `google/gemini-3.1-pro`         | ✅         |
 | **GPT-5.1**              | `openai/gpt-5.1`                | ✅         |
 | **GPT-5.2**              | `openai/gpt-5.2`                | ✅         |
 | **GPT-5 Pro**            | `openai/gpt-5-pro`              | ❌         |
 | **Claude Sonnet 4.5**    | `anthropic/claude-sonnet-4.5`   | ✅         |
+| **Claude Sonnet 4.6**    | `anthropic/claude-sonnet-4.6`   | ✅         |
 | **Grok 4 Fast**          | `x-ai/grok-4-fast`              | ✅         |
 | **Grok 4.1 Fast**        | `x-ai/grok-4.1-fast`            | ✅         |
 | **Kimi K2.5**            | `moonshotai/kimi-k2.5`          | ✅         |
@@ -139,10 +141,10 @@ Access multiple AI providers through a single API.
 Ultra-fast inference with open-source models.
 
 
-| Model                    | API Name / Short Name                            | Vision |
-| ------------------------ | ------------------------------------------------- | ------ |
-| **Llama 4 Maverick 17B** | `meta-llama/llama-4-maverick-17b-128e-instruct`  | ✅      |
-| **Llama 4 Scout 17B**    | `meta-llama/llama-4-scout-17b-16e-instruct`      | ✅      |
+| Model                    | API Name / Short Name                            | Vision | Notes              |
+| ------------------------ | ------------------------------------------------- | ------ | ------------------ |
+| **GPT-OSS 120B**         | `openai/gpt-oss-120b`                             | —      | Coding agent only  |
+| **Llama 4 Scout 17B**    | `meta-llama/llama-4-scout-17b-16e-instruct`      | ✅      |                    |
 
 
 🔗 **Get API Key:** [console.groq.com/keys](https://console.groq.com/keys)
@@ -164,15 +166,33 @@ Direct access to OpenAI's latest models.
 
 ---
 
+### Anthropic Direct
+
+Native access to Anthropic's Claude models.
+
+
+| Model                  | Model name / API name   |
+| ---------------------- | ----------------------- |
+| **Claude Sonnet 4.6**  | `claude-sonnet-4.6` (`claude-sonnet-4-6`) |
+| **Claude Sonnet 4.5**  | `claude-sonnet-4.5` (`claude-sonnet-4-5-20250929`) |
+| **Claude Haiku 4.5**   | `claude-haiku-4.5` (`claude-haiku-4-5-20251001`) |
+| **Claude Opus 4.5**    | `claude-opus-4.5` (`claude-opus-4-5-20251101`) |
+
+
+🔗 **Get API Key:** [console.anthropic.com](https://console.anthropic.com)
+
+---
+
 ## 🎮 Model Selection Guide
 
 
 | Use Case         | Recommended Model                | Why                                   |
 | ---------------- | -------------------------------- | ------------------------------------- |
 | **Fast & Cheap** | `gemini-3-flash`                 | Great balance of speed and capability |
-| **Most Capable** | `claude-sonnet-4.5/gemini-3-pro` | Best reasoning for complex tasks      |
-| **Ultra-Fast**   | `llama-4-maverick` (Groq)        | Lowest latency                        |
-| **Best Vision**  | `claude-sonnet-4.5`              | Excellent UI understanding            |
+| **Most Capable** | `claude-sonnet-4.5` / `claude-4.6` / `gemini-3-pro` | Best reasoning for complex tasks      |
+| **Ultra-Fast**   | `llama-4-scout` (Groq)          | Lowest latency                        |
+| **Coding agent** | `gpt-oss-120b` (Groq)          | Coding agent only                     |
+| **Best Vision**  | `claude-sonnet-4.5` / `claude-4.6` (Anthropic) | Excellent UI understanding   |
 
 
 ---
@@ -200,7 +220,7 @@ Direct access to OpenAI's latest models.
 | -------------------------- | -------- | ------- |
 | Multi-agent system         | ✅        | ❌       |
 | knowledge system           | ✅        | ❌       |
-| 16+ model support          | ✅        | Limited |
+| 20+ model support          | ✅        | Limited |
 | Vision-based automation    | ✅        | ✅       |
 | Coding agent               | ✅        | ❌       |
 | Web search integration     | ✅        | ❌       |

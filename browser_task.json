@@ -1,0 +1,28 @@
+{
+  "task 1": {
+    "content": "Task: Create Population Table in Google Sheets (GUI Interaction Only)\n\nYour task is to use Google Sheets to create a structured table.\nYou must strictly use GUI interaction only (mouse clicks and keyboard input).\nDo not use APIs, scripts, automation tools, browser console, extensions, or external tools.\nDo not open or navigate to any unrelated website.\n\nTable Structure\n\nCreate exactly four columns with the following column names (spelled exactly as written):\n\nYear\nMen (Millions)\nWomen (Millions)\nTotal (Millions)\n\nEnter the Following Data\n\n1995 – Men: 28.5, Women: 29.1, Total: 57.6\n1996 – Men: 28.7, Women: 29.3, Total: 58.0\n1997 – Men: 28.9, Women: 29.5, Total: 58.4\n1998 – Men: 29.1, Women: 29.7, Total: 58.8\n1999 – Men: 29.3, Women: 29.9, Total: 59.2\n2000 – Men: 29.5, Women: 30.1, Total: 59.6\n2001 – Men: 29.8, Women: 30.3, Total: 60.1\n2002 – Men: 30.0, Women: 30.5, Total: 60.5\n2003 – Men: 30.3, Women: 30.8, Total: 61.1\n2004 – Men: 30.6, Women: 31.1, Total: 61.7\n2005 – Men: 30.9, Women: 31.4, Total: 62.3\n2006 – Men: 31.2, Women: 31.7, Total: 62.9\n2007 – Men: 31.5, Women: 32.0, Total: 63.5\n2008 – Men: 31.8, Women: 32.3, Total: 64.1\n2009 – Men: 32.1, Women: 32.6, Total: 64.7\n2010 – Men: 32.4, Women: 32.9, Total: 65.3\n2011 – Men: 32.8, Women: 33.3, Total: 66.1\n2012 – Men: 33.1, Women: 33.6, Total: 66.7\n2013 – Men: 33.4, Women: 33.9, Total: 67.3\n2014 – Men: 33.7, Women: 34.2, Total: 67.9\n2015 – Men: 34.0, Women: 34.5, Total: 68.5\n2016 – Men: 34.3, Women: 34.8, Total: 69.1\n2017 – Men: 34.6, Women: 35.1, Total: 69.7\n2018 – Men: 34.9, Women: 35.4, Total: 70.3\n2019 – Men: 35.2, Women: 35.7, Total: 70.9\n2020 – Men: 35.5, Women: 36.0, Total: 71.5\n2021 – Men: 35.8, Women: 36.3, Total: 72.1\n2022 – Men: 36.1, Women: 36.6, Total: 72.7\n2023 – Men: 36.4, Women: 36.9, Total: 73.3\n2024 – Men: 36.7, Women: 37.2, Total: 73.9\n\nRequirements\n\nColumn names must match exactly.\n\nAll 30 rows from 1995 to 2024 must be present.\n\nTotals must be entered correctly.\n\nDo not modify column names.\n\nDo not skip any year.\n\nUse only visible GUI actions inside Google Sheets.",
+    "agents": [
+      {
+        "name": "window-use",
+        "status": "pass"
+      },
+      {
+        "name": "autuse agent",
+        "status": "pass"
+      }
+    ]
+  },
+  "task 2": {
+    "content": "Your task is to use Gmail and Google Calendar to perform a sequence of actions strictly within a single browser tab. You must not open any new tabs or windows at any point during the task. First, open Gmail and from there navigate to Google Calendar without creating a new tab. Block your calendar for the entire day on 31 March 2026 by creating an all-day event and saving it. After successfully saving the event, return to Gmail in the same tab and compose an email to yourself with the subject line \"Calendar Blocked – 31 March 2026\" and a message stating that the calendar has been successfully blocked for the full day on 31 March 2026. Send the email. Then, still using the same browser tab, navigate back to Google Calendar, locate the all-day event created for 31 March 2026, and delete it. Confirm that the event has been completely removed before ending the task. Under no circumstances should you open a new tab, use background tabs, or switch to a separate window.",
+    "agents": [
+      {
+        "name": "window-use",
+        "status": "fail"
+      },
+      {
+        "name": "autuse agent",
+        "status": "pass"
+      }
+    ]
+  }
+}
