@@ -28,6 +28,11 @@
   <a href="https://drive.google.com/file/d/1iTC_nGRIuAsEBBOudjccU_pBi5bxXQm3/view?usp=sharing"><img src="https://img.shields.io/badge/▶_OS_Based_Web_Scraping-EA4335?style=for-the-badge&logo=google-drive&logoColor=white" alt="OS Based Web Scraping"/></a>
 </p>
 
+---
+
+<p align="center">
+  <img src="benchmark_graph.svg" alt="Benchmark Results" width="680"/>
+</p>
 
 ---
 
