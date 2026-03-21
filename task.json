@@ -167,6 +167,19 @@ vulgaris patients from Jan-May 2018 as listed on the NIH website?
       }
     ]
   }
+"task 14 ": {
+    "content": "open chrome and go to youtube and play the latest beehack video",
+    "agents": [
+      {
+        "name": "window-use",
+        "status": "pass"
+      },
+      {
+        "name": "autuse agent",
+        "status": "pass"
+      }
+    ]
+  }
       ]
     }
   }
