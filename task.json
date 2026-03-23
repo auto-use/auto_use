@@ -87,6 +87,7 @@
       }
     ]
   },
+  // remove task 6 broken
   "task 6": {
     "content": "Use Microsoft Edge. Navigate to https://www.kaggle.com/datasets/amar5693/student-performance-dataset/code and download the dataset as a zip file. Extract the zip file and then open Google Colab. Upload the extracted dataset directly into Colab — no terminal usage is allowed. Explore the dataset at a high level to understand its structure and key features. After understanding the dataset, write a simple machine learning model using Random Forest to predict the marks of the student.",
     "agents": [
