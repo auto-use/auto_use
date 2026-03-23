@@ -62,6 +62,11 @@
         "name": "autuse agent",
         "status": "pass"
       }
+        ,
+         {
+        "name": "openclaw",
+        "status": "fail"
+      }
     ]
   },
   "task 5": {
