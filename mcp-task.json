@@ -35,3 +35,12 @@ autouse: pass
 task 2 "Read Project Gutenberg books via MCP. Search, fetch metadata, and retrieve text in passages."
 
 autouse: pass
+
+task 3 "Create a Python script named hello_mcp.py that prints the phrase "MCP is working".
+use uv instead of python
+Execute the script using the terminal/command line.
+Capture the standard output.
+Delete the hello_mcp.py file.
+Report back with the output you captured."
+
+autouse: fail
