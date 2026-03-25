@@ -32,3 +32,6 @@ Open Notepad2. Type the following: MCP Test Case 1 This is a multi-step automati
 "
 autouse: pass
 
+task 2 "Read Project Gutenberg books via MCP. Search, fetch metadata, and retrieve text in passages."
+
+autouse: pass
