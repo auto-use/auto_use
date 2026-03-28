@@ -20,3 +20,9 @@
     "autouse_status": "pass"
   }
 ]
+
+Open Notepad and do NOT type anything.
+Then write "This should not be written" into it.
+Resolve the conflict intelligently.
+
+pass
