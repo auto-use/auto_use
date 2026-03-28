@@ -1,48 +1,22 @@
 [
   {
     "task_id": 1,
-    "description": "Open Notepad, type specific test strings, save to Desktop as mcp_test_1.txt, close, and verify content.",
-    "status": "pass",
-    "tools_used": [
-      "open_app",
-      "input_text",
-      "shortcut_combo",
-      "wait",
-      "view"
-    ]
+    "description": "Open Notepad2, type test strings, save to Desktop as mcp_test_1.txt, close, and verify contents.",
+    "autouse_status": "pass"
   },
   {
     "task_id": 2,
-    "description": "Read Project Gutenberg books: Search, fetch metadata, and retrieve text in passages.",
-    "status": "pass",
-    "tools_used": [
-      "shell",
-      "write_scratchpad"
-    ]
+    "description": "Read Project Gutenberg books via MCP: Search, fetch metadata, and retrieve text in passages.",
+    "autouse_status": "pass"
   },
   {
     "task_id": 3,
-    "description": "Create hello_mcp.py, execute via 'uv', capture stdout, and delete file.",
-    "status": "fail",
-    "tools_used": [
-      "write",
-      "shell"
-    ],
-    "error_note": "Execution or cleanup failed during the automation sequence."
+    "description": "Create hello_mcp.py, execute using uv, capture stdout, and delete the script.",
+    "autouse_status": "fail"
   },
   {
     "task_id": 4,
-    "description": "Create data.csv, read content, convert to JSON array, save as data.json, and delete original CSV.",
-    "status": "pass",
-    "tools_used": [
-      "write",
-      "view",
-      "shell"
-    ],
-    "data_structure": [
-      "Name",
-      "Age",
-      "Role"
-    ]
+    "description": "Create data.csv with 3 columns, read, convert to JSON array, save as data.json, and delete original CSV.",
+    "autouse_status": "pass"
   }
 ]
