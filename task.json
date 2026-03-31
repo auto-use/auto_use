@@ -100,7 +100,8 @@
       "content": "In NASA’s Astronomy Picture of the Day on 2006 January 21, two astronauts are visible, with one appearing much smaller than the other. As of August 2023, out of the astronauts in the NASA Astronaut Group that the smaller astronaut was a member of, which one spent the least time in space, and how many minutes did he spend in space, rounded to the nearest minute? Exclude any astronauts who did not spend any time in space. Give the last name of the astronaut, separated from the number of minutes by a semicolon.",
       "agents": [
         { "name": "window-use", "status": "pass" },
-        { "name": "autuse agent", "status": "pass" }
+        { "name": "autuse agent", "status": "pass" },
+        { "name": "openclaw", "status": "pass" }
       ]
     },
     "task_14": {
