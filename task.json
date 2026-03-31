@@ -111,6 +111,14 @@
         { "name": "autuse agent", "status": "pass" },
          { "name": "openclaw", "status": "fail" }
       ]
+    },
+    "task_15": {
+      "content": "Open Firefox and search for “best AI tools for coding 2026”. Open at least 3 different sources in new tabs. From each site, extract: Tool name, Key feature, Pricing (if available). Then compile a clean comparison table.",
+      "agents": [
+        { "name": "window-use", "status": "pending" },
+        { "name": "autuse agent", "status": "pending" },
+        { "name": "openclaw", "status": "fail" }
+      ]
     }
   }
 }
