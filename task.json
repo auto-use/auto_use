@@ -251,7 +251,7 @@
 "task_31": {
       "content": "Create a competitive landscape analysis for the enterprise observability and APM (Application Performance Monitoring) market segment. Based on your knowledge, identify the top 5 players, their key differentiators, market trends, and typical pricing models. Save your findings to a file called market_research.md in a well-structured format with sections for each competitor and a summary comparison table. If you have access to web search tools, use them to gather the most current information. Otherwise, use your knowledge of this market to produce a thorough analysis.",
       "agents": [
-        { "name": "window-use", "status": "pending" },
+        { "name": "window-use", "status": "fail" },
         { "name": "autuse agent", "status": "pass" },
         { "name": "openclaw", "status": "pending" }
       ]
