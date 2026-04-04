@@ -206,18 +206,18 @@
 "task_26": {
       "content": "Read the document in summary_source.txt and write a concise 3-paragraph summary to summary_output.txt.",
       "agents": [
-        { "name": "window-use", "status": "pending" },
+        { "name": "window-use", "status": "pass" },
         { "name": "autuse agent", "status": "pass" },
         { "name": "openclaw", "status": "pending" }
       ]
     } , 
 
 "task_27": {
-      "content": "generate an image of batman and spiderman having an duel",
+      "content": "Search for all files with the extension .png in the Pictures folder and list their full names in png_files.txt in the same folder",
       "agents": [
-        { "name": "window-use", "status": "fail" },
-        { "name": "autuse agent", "status": "pass" },
-        { "name": "openclaw", "status": "fail" }
+        { "name": "window-use", "status": "pass" },
+        { "name": "autuse agent", "status": "pending" },
+        { "name": "openclaw", "status": "pending" }
       ]
     } , 
 
