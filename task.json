@@ -386,7 +386,7 @@
 "task_46": {
       "content": "Read the project notes in notes.md and answer: What is the deadline for the beta release? Save your answer to answer.txt.",
       "agents": [
-        { "name": "window-use", "status": "pending" },
+        { "name": "window-use", "status": "pass" },
         { "name": "autuse agent", "status": "pass" },
         { "name": "openclaw", "status": "pending" }
       ]
