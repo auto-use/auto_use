@@ -314,7 +314,7 @@
 "task_38": {
       "content": "Read the file GPT4.pdf in my workspace. It's a technical paper about GPT-4. Write an \"Explain Like I'm 5\" (ELI5) summary of the paper and save it to eli5_summary.txt",
       "agents": [
-        { "name": "window-use", "status": "pending" },
+        { "name": "window-use", "status": "fail" },
         { "name": "autuse agent", "status": "pass" },
         { "name": "openclaw", "status": "pending" }
       ]
