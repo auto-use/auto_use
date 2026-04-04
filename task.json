@@ -233,7 +233,7 @@
 "task_29": {
       "content": "Create a basic Python project structure for a library called \"datautils\". The project should include: A src/datautils/ package directory with an __init__.py file A tests/ directory with a test_datautils.py file A pyproject.toml file with basic project metadata (name, version 0.1.0, description) A README.md file with a title and brief description",
       "agents": [
-        { "name": "window-use", "status": "pending" },
+        { "name": "window-use", "status": "fail" },
         { "name": "autuse agent", "status": "pass" },
         { "name": "openclaw", "status": "pending" }
       ]
