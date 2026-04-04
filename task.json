@@ -216,7 +216,7 @@
       "content": "Search for all files with the extension .png in the Pictures folder and list their full names in png_files.txt in the same folder",
       "agents": [
         { "name": "window-use", "status": "pass" },
-        { "name": "autuse agent", "status": "pending" },
+        { "name": "autuse agent", "status": "pass" },
         { "name": "openclaw", "status": "pending" }
       ]
     } , 
