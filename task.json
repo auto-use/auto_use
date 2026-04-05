@@ -184,7 +184,7 @@
       "agents": [
         { "name": "cursortouch", "status": "fail" },
         { "name": "autuse agent", "status": "pass" },
-        { "name": "openclaw", "status": "pending" }
+        { "name": "openclaw", "status": "pass" }
       ]
     } ,
 "task_24": {
