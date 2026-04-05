@@ -175,7 +175,7 @@
       "agents": [
         { "name": "cursortouch", "status": "pass" },
         { "name": "autuse agent", "status": "pass" },
-        { "name": "openclaw", "status": "pending" }
+        { "name": "openclaw", "status": "pass" }
       ]
     } ,
 
