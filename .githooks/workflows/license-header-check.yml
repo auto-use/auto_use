@@ -1,0 +1,38 @@
+name: License Header Check
+
+on:
+  pull_request:
+    branches: [main, developer-branch]
+
+jobs:
+  check-headers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check SPDX header in Python files
+        run: |
+          set -e
+          missing=()
+          while IFS= read -r file; do
+            if [ -f "$file" ]; then
+              if ! head -n 1 "$file" | grep -q "SPDX-License-Identifier"; then
+                missing+=("$file")
+              fi
+            fi
+          done < <(find . -type f -name "*.py" -not -path "./venv/*" -not -path "./.venv/*" -not -path "./__pycache__/*")
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "The following Python files are missing the SPDX license header:"
+            printf '  - %s\n' "${missing[@]}"
+            echo ""
+            echo "Add this header to the top of each file:"
+            echo "  # SPDX-License-Identifier: LicenseRef-Autouse-Proprietary"
+            echo "  # Copyright (c) 2026 Ashish Yadav - Autouse AI"
+            echo "  # All rights reserved. Proprietary and confidential."
+            echo "  # See LICENSE and NOTICE at the repo root for terms."
+            exit 1
+          fi
+
+          echo "All Python files have the required SPDX header."

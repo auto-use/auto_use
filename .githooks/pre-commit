@@ -1,0 +1,31 @@
+#!/bin/bash
+# Pre-commit hook: auto-inserts the Autouse AI copyright header into any
+# staged Python file that doesn't already have one.
+#
+# Activate once with:
+#   git config core.hooksPath .githooks
+
+set -e
+
+TEMPLATE_FILE=".githooks/header-template.txt"
+
+if [ ! -f "$TEMPLATE_FILE" ]; then
+    exit 0
+fi
+
+staged_py_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.py$' || true)
+
+if [ -z "$staged_py_files" ]; then
+    exit 0
+fi
+
+while IFS= read -r file; do
+    [ -f "$file" ] || continue
+    if ! head -n 1 "$file" | grep -q "SPDX-License-Identifier"; then
+        tmp=$(mktemp)
+        cat "$TEMPLATE_FILE" "$file" > "$tmp"
+        mv "$tmp" "$file"
+        git add "$file"
+        echo "pre-commit: header added to $file"
+    fi
+done <<< "$staged_py_files"

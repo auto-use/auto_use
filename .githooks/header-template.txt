@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Autouse-Proprietary
+# Copyright (c) 2026 Ashish Yadav — Autouse AI
+# All rights reserved. Proprietary and confidential.
+# See LICENSE and NOTICE at the repo root for terms.
