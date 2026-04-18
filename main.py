@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from Auto_Use.windows_use.agent.service import AgentService
+from Auto_Use.macOS_use.agent.service import AgentService
 
 # Configuration
 PROVIDER = "perplexity"
