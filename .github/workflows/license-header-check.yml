@@ -1,38 +1,53 @@
-name: License Header Check
+name: Auto-Add License Header
 
 on:
   pull_request:
     branches: [main, developer-branch]
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
-  check-headers:
+  add-headers:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout PR branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check SPDX header in Python files
+      - name: Add SPDX header to Python files missing it
         run: |
           set -e
-          missing=()
+          HEADER='# SPDX-License-Identifier: LicenseRef-Autouse-Proprietary
+          # Copyright (c) 2026 Ashish Yadav - Autouse AI
+          # All rights reserved. Proprietary and confidential.
+          # See LICENSE and NOTICE at the repo root for terms.
+          '
+          modified=0
           while IFS= read -r file; do
             if [ -f "$file" ]; then
               if ! head -n 1 "$file" | grep -q "SPDX-License-Identifier"; then
-                missing+=("$file")
+                echo "Adding header to: $file"
+                tmp=$(mktemp)
+                printf '%s\n' "$HEADER" > "$tmp"
+                cat "$file" >> "$tmp"
+                mv "$tmp" "$file"
+                modified=$((modified+1))
               fi
             fi
           done < <(find . -type f -name "*.py" -not -path "./venv/*" -not -path "./.venv/*" -not -path "./__pycache__/*")
+          echo "Modified $modified file(s)"
+          echo "MODIFIED=$modified" >> $GITHUB_ENV
 
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "The following Python files are missing the SPDX license header:"
-            printf '  - %s\n' "${missing[@]}"
-            echo ""
-            echo "Add this header to the top of each file:"
-            echo "  # SPDX-License-Identifier: LicenseRef-Autouse-Proprietary"
-            echo "  # Copyright (c) 2026 Ashish Yadav - Autouse AI"
-            echo "  # All rights reserved. Proprietary and confidential."
-            echo "  # See LICENSE and NOTICE at the repo root for terms."
-            exit 1
-          fi
-
-          echo "All Python files have the required SPDX header."
+      - name: Commit and push changes
+        if: env.MODIFIED != '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: auto-add SPDX license headers"
+          git push
