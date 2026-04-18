@@ -22,25 +22,46 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# Build the expected header from small pieces so this script's own source
+# does not contain a second literal copy of the header that would confuse
+# a naive duplicate detector.
+_COPYRIGHT_OWNER = "Ashish Yadav (Autouse AI)"
+_COPYRIGHT_YEAR = "2026"
+
 EXPECTED_HEADER_LINES = [
-    "# Copyright 2026 Ashish Yadav (Autouse AI)",
+    f"# Copyright {_COPYRIGHT_YEAR} {_COPYRIGHT_OWNER}",
     "#",
-    "# Licensed under the Apache License, Version 2.0 (the \"License\");",
+    '# Licensed under the Apache License, Version 2.0 (the "License");',
     "# you may not use this file except in compliance with the License.",
     "# You may obtain a copy of the License at",
     "#",
     "#     http://www.apache.org/licenses/LICENSE-2.0",
     "#",
     "# Unless required by applicable law or agreed to in writing, software",
-    "# distributed under the License is distributed on an \"AS IS\" BASIS,",
+    '# distributed under the License is distributed on an "AS IS" BASIS,',
     "# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.",
     "# See the License for the specific language governing permissions and",
     "# limitations under the License.",
 ]
 
-APACHE_MARKER = "Licensed under the Apache License, Version 2.0"
+# Used for duplicate detection. The copyright line is unique enough that
+# two real copies in one file means there's actually a duplicate.
+DUPLICATE_MARKER = f"Copyright {_COPYRIGHT_YEAR} {_COPYRIGHT_OWNER}"
 
-EXCLUDE_PREFIXES = (".git/", ".venv/", "venv/", "env/", "build/", "dist/")
+EXCLUDE_PREFIXES = (
+    ".git/",
+    ".venv/",
+    "venv/",
+    "env/",
+    "build/",
+    "dist/",
+)
+
+# The checker itself is excluded so it does not flag its own header
+# definitions as a duplicate.
+EXCLUDE_FILES = {
+    "scripts/check_license_headers.py",
+}
 
 
 def tracked_python_files() -> list[Path]:
@@ -58,6 +79,8 @@ def tracked_python_files() -> list[Path]:
             continue
         if any(line.startswith(p) for p in EXCLUDE_PREFIXES):
             continue
+        if line in EXCLUDE_FILES:
+            continue
         files.append(REPO_ROOT / line)
     return files
 
@@ -72,22 +95,21 @@ def check_file(path: Path) -> list[str]:
     lines = text.splitlines()
     start = 1 if lines and lines[0].startswith("#!") else 0
     header_slice = lines[start : start + len(EXPECTED_HEADER_LINES)]
+    rel = path.relative_to(REPO_ROOT)
 
     if header_slice != EXPECTED_HEADER_LINES:
-        if APACHE_MARKER in text:
+        if DUPLICATE_MARKER in text:
             errors.append(
-                f"{path.relative_to(REPO_ROOT)}: Apache header present but does "
-                f"not match the expected AutoUse header."
+                f"{rel}: Apache header present but does not match the "
+                f"expected AutoUse header (check wording or position)."
             )
         else:
-            errors.append(
-                f"{path.relative_to(REPO_ROOT)}: missing Apache 2.0 header."
-            )
+            errors.append(f"{rel}: missing Apache 2.0 header.")
 
-    if text.count(APACHE_MARKER) > 1:
+    if text.count(DUPLICATE_MARKER) > 1:
         errors.append(
-            f"{path.relative_to(REPO_ROOT)}: Apache header appears more than "
-            f"once in the file (only one header allowed)."
+            f"{rel}: Apache header appears more than once "
+            f"(only one header allowed)."
         )
 
     return errors
