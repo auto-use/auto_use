@@ -1,9 +1,5 @@
-# Code Owners for Auto-Use-Windows
-# These users are automatically requested for review on all pull requests
+# CODEOWNERS for auto-use/Auto-Use
+# Every PR auto-requests review from the owners listed below.
+# Last matching pattern wins, so the catch-all line at the bottom covers everything.
 
-* @auto-use @FunctionFreak
-.github/ @auto-use @FunctionFreak
-.github/CODEOWNERS @auto-use @FunctionFreak
-.github/workflows/ @auto-use @FunctionFreak
-.githooks/ @auto-use @FunctionFreak
-LICENSE @auto-use @FunctionFreak
+*   @FunctionFreak @auto-use
