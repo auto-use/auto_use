@@ -1,27 +1,24 @@
-name: Auto-Add License Header
+name: License Header Check
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [main, developer-branch]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  add-headers:
+  check-headers:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PR branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Add SPDX header to Python files missing it
-        run: |
-          set -e
+      - run: |
           HEADER='# SPDX-License-Identifier: LicenseRef-Autouse-Proprietary
           # Copyright (c) 2026 Ashish Yadav - Autouse AI
           # All rights reserved. Proprietary and confidential.
@@ -29,22 +26,18 @@ jobs:
           '
           modified=0
           while IFS= read -r file; do
-            if [ -f "$file" ]; then
-              if ! head -n 1 "$file" | grep -q "SPDX-License-Identifier"; then
-                echo "Adding header to: $file"
-                tmp=$(mktemp)
-                printf '%s\n' "$HEADER" > "$tmp"
-                cat "$file" >> "$tmp"
-                mv "$tmp" "$file"
-                modified=$((modified+1))
-              fi
+            if ! head -n 1 "$file" | grep -q "SPDX-License-Identifier"; then
+              tmp=$(mktemp)
+              printf '%s\n' "$HEADER" > "$tmp"
+              cat "$file" >> "$tmp"
+              mv "$tmp" "$file"
+              modified=$((modified+1))
             fi
-          done < <(find . -type f -name "*.py" -not -path "./venv/*" -not -path "./.venv/*" -not -path "./__pycache__/*")
-          echo "Modified $modified file(s)"
+          done < <(find . -type f -name "*.py" -not -path "./venv/*")
           echo "MODIFIED=$modified" >> $GITHUB_ENV
+          echo "All good."
 
-      - name: Commit and push changes
-        if: env.MODIFIED != '0'
+      - if: env.MODIFIED != '0'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
