@@ -16,11 +16,11 @@ from Auto_Use.macOS_use.agent.service import AgentService
 
 # Configuration
 PROVIDER = "perplexity"
-MODEL = "gemini-3-flash" #refer to the model name correctly from the view.py from llm provider folder.
+MODEL = "gemini-3.1-pro" #refer to the model name correctly from the Auto_Use/OS_use/llm_provider/view.py from llm provider folder.
 # Your task here
 task = """
 
-write hello in milestone
+open youtube and playy something
 
 """
 

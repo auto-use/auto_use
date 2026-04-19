@@ -53,16 +53,22 @@ else
 fi
 
 # Root Python: windows_use -> macOS_use and windows_app -> mac_app
-# Scope: .py files outside venv/, dist/, __pycache__/, and the Windows fork
-# folders themselves (windows_use/, windows_app/). We only want to rewrite
-# stray references in shared/root files; the Windows source tree must stay
-# untouched so a merged mac+windows checkout doesn't get mangled.
-py_win_use=$(grep -rl --include='*.py' \
+# Scope: .py files outside venv/, dist/, __pycache__/, the Windows fork
+# folders (windows_use/, windows_app/), AND the Windows-specific top-level
+# scripts (windows_app.py, windows_binary_build.py, or anything matching
+# windows_*.py). --exclude-dir only filters directories, so those files
+# would otherwise be rewritten — which mangles the Windows fork in a
+# combined mac+windows checkout. We only want to rewrite stray refs in
+# genuinely shared files like main.py.
+#
+# Portability note: BSD grep on macOS supports --exclude=GLOB for filename
+# filtering, so we use it here alongside --exclude-dir.
+py_win_use=$(grep -rl --include='*.py' --exclude='windows_*.py' \
     --exclude-dir=venv --exclude-dir=dist --exclude-dir=__pycache__ \
     --exclude-dir=windows_use --exclude-dir=windows_app \
     'windows_use' . 2>/dev/null | wc -l | tr -d ' ' || echo 0)
 if [ "$py_win_use" != "0" ]; then
-    grep -rl --include='*.py' \
+    grep -rl --include='*.py' --exclude='windows_*.py' \
         --exclude-dir=venv --exclude-dir=dist --exclude-dir=__pycache__ \
         --exclude-dir=windows_use --exclude-dir=windows_app \
         'windows_use' . 2>/dev/null \
@@ -72,12 +78,12 @@ else
     print_info "Python imports already reference macOS_use"
 fi
 
-py_win_app=$(grep -rl --include='*.py' \
+py_win_app=$(grep -rl --include='*.py' --exclude='windows_*.py' \
     --exclude-dir=venv --exclude-dir=dist --exclude-dir=__pycache__ \
     --exclude-dir=windows_use --exclude-dir=windows_app \
     'windows_app' . 2>/dev/null | wc -l | tr -d ' ' || echo 0)
 if [ "$py_win_app" != "0" ]; then
-    grep -rl --include='*.py' \
+    grep -rl --include='*.py' --exclude='windows_*.py' \
         --exclude-dir=venv --exclude-dir=dist --exclude-dir=__pycache__ \
         --exclude-dir=windows_use --exclude-dir=windows_app \
         'windows_app' . 2>/dev/null \
