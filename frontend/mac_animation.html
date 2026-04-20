@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stylized Monitor Face</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background-color: #000;
+      font-family: sans-serif;
+      overflow: hidden;
+    }
+
+    #bgVideo {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      min-width: 100vw;
+      min-height: 100vh;
+      transform: translate(-50%, -50%);
+      object-fit: cover;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .laptop-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      opacity: 0;
+      position: fixed;
+      transform: scale(0.6);
+      transform-origin: center center;
+      transition: opacity 0.5s ease;
+    }
+
+    .monitor-bezel {
+      width: 420px;
+      height: 310px;
+      background: #3b3b40;
+      border-radius: 35px;
+      padding: 18px;
+      position: relative;
+      box-shadow:
+        inset -3px -3px 8px rgba(0, 0, 0, 0.6),
+        inset 3px 3px 8px rgba(255, 255, 255, 0.15);
+    }
+
+    .monitor-screen {
+      width: 100%;
+      height: 100%;
+      background-color: #fffafc;
+      border-radius: 20px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 55px;
+    }
+
+    .eye {
+      width: 34px;
+      height: 80px;
+      border-radius: 30px;
+      background: linear-gradient(180deg, #d880be 0%, #8782eb 100%);
+      transform: translateY(-50px);
+      animation: blink 4s infinite;
+    }
+
+    @keyframes blink {
+      0%, 85%, 100% { transform: translateY(-50px) scaleY(1); }
+      92% { transform: translateY(-50px) scaleY(0.1); }
+    }
+
+    .laptop-base {
+      width: 500px;
+      height: 28px;
+      background: #404045;
+      border-radius: 12px;
+      box-shadow:
+        inset 0 3px 5px rgba(255, 255, 255, 0.2),
+        inset 0 -3px 5px rgba(0, 0, 0, 0.5);
+    }
+
+    .edge-glow {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      border-radius: 20px;
+      pointer-events: none;
+      z-index: 50;
+      opacity: 0;
+      box-shadow:
+        inset 0 0 60px rgba(220, 160, 255, 0.6),
+        inset 0 0 20px rgba(240, 200, 255, 0.4);
+    }
+
+    .animated-cursor {
+      position: absolute;
+      width: 190px;
+      z-index: 100;
+      left: 50%;
+      top: 50%;
+      transform-origin: 0 0;
+      pointer-events: none;
+      filter: none;
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .loading-dots {
+      position: absolute;
+      bottom: -35px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      opacity: 0;
+    }
+    .loading-dots .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #b0b0b0;
+      animation: dotPulse 1.4s ease-in-out infinite;
+    }
+    .loading-dots .dot:nth-child(2) { animation-delay: 0.2s; }
+    .loading-dots .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes dotPulse {
+      0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+      40% { opacity: 1; transform: scale(1.2); }
+    }
+
+    #particleCanvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 1000;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <video id="bgVideo" autoplay muted loop playsinline aria-hidden="true">
+    <source src="background.mp4" type="video/mp4">
+  </video>
+
+  <canvas id="particleCanvas"></canvas>
+
+  <div class="laptop-container" id="laptop">
+    <div class="monitor-bezel">
+      <div class="monitor-screen">
+        <div class="eye"></div>
+        <div class="eye"></div>
+        <div class="edge-glow" id="edgeGlow"></div>
+      </div>
+      <img class="animated-cursor" id="cursor" src="/cursor.png" alt="3D Cursor">
+    </div>
+    <div class="laptop-base"></div>
+    <div class="loading-dots" id="loadingDots">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('particleCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const ASSEMBLE_DURATION = 2200;
+    const SETTLE_PAUSE = 500;
+    const CROSSFADE_DURATION = 600;
+    const CURSOR_ENTER_DURATION = 800;
+    const CURSOR_PAUSE = 200;
+    const CURSOR_CLICK_DURATION = 200;
+    const GLOW_DURATION = 1600;
+    const ZOOM_FADE_DURATION = 1800;
+    const POST_PAUSE = 800;
+
+    // Shape dimensions (matches CSS exactly)
+    const bezelW = 456, bezelH = 346, bezelR = 35;
+    const screenW = 420, screenH = 310, screenR = 20;
+    const baseW = 500, baseH = 28, baseR = 12;
+    const gap = 14;
+    const totalH = bezelH + gap + baseH;
+
+    // Eye dimensions
+    const eyeW = 34, eyeH = 80, eyeR = 17;
+    const eyeGap = 55;
+    const eyeOffsetY = -50; // translateY(-50px) from center of screen
+
+    // Check if point is inside a rounded rect (local coords, rect centered at 0,0)
+    function inRoundedRect(px, py, w, h, r) {
+      const hw = w / 2, hh = h / 2;
+      const ax = Math.abs(px), ay = Math.abs(py);
+      if (ax <= hw - r && ay <= hh) return true;
+      if (ax <= hw && ay <= hh - r) return true;
+      if (ax > hw || ay > hh) return false;
+      const dx = ax - (hw - r), dy = ay - (hh - r);
+      return dx * dx + dy * dy <= r * r;
+    }
+
+    // Check if point is inside a pill/capsule shape (local coords, centered at 0,0)
+    function inPill(px, py, w, h) {
+      const r = w / 2;
+      const straightH = h - w;
+      const ax = Math.abs(px), ay = Math.abs(py);
+      if (ax <= r && ay <= straightH / 2) return true;
+      // Top cap
+      if (ay > straightH / 2) {
+        const dy = ay - straightH / 2;
+        return ax * ax + dy * dy <= r * r;
+      }
+      return false;
+    }
+
+    const S = 0.6;  // global scale (40% smaller)
+    const PS = 3 * S;   // particle size
+    const SP = 3.5; // spacing
+
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+
+    // Center of bezel
+    const bezelCx = 0, bezelCy = -totalH / 2 + bezelH / 2;
+    // Center of screen (inside bezel)
+    const screenCx = 0, screenCy = bezelCy;
+    // Center of base
+    const baseCy = -totalH / 2 + bezelH + gap + baseH / 2;
+    // Eye centers (relative to screen center)
+    const eyeLx = -(eyeGap / 2 + eyeW / 2), eyeRx = (eyeGap / 2 + eyeW / 2);
+    const eyeCy = screenCy + eyeOffsetY;
+
+    const targets = [];
+
+    // Scan a bounding area and classify each point
+    const scanTop = -totalH / 2 - 5;
+    const scanBot = totalH / 2 + 5;
+    const scanLeft = -baseW / 2 - 5;
+    const scanRight = baseW / 2 + 5;
+
+    for (let y = scanTop; y < scanBot; y += SP) {
+      for (let x = scanLeft; x < scanRight; x += SP) {
+        // Check eyes first
+        const inLeftEye = inPill(x - eyeLx, y - eyeCy, eyeW, eyeH);
+        const inRightEye = inPill(x - eyeRx, y - eyeCy, eyeW, eyeH);
+        if (inLeftEye || inRightEye) {
+          // Eye gradient: pink at top, purple at bottom
+          const eyeLocalY = y - eyeCy;
+          const t = (eyeLocalY + eyeH / 2) / eyeH;
+          const r = Math.round(216 + (135 - 216) * t);
+          const g = Math.round(128 + (130 - 128) * t);
+          const b = Math.round(190 + (235 - 190) * t);
+          targets.push({ x, y, color: `rgb(${r},${g},${b})` });
+          continue;
+        }
+
+        // Check screen area (off-white)
+        const inScreen = inRoundedRect(x - screenCx, y - screenCy, screenW, screenH, screenR);
+        if (inScreen) {
+          targets.push({ x, y, color: '#fffafc' });
+          continue;
+        }
+
+        // Check bezel (dark grey)
+        const inBezel = inRoundedRect(x - bezelCx, y - bezelCy, bezelW, bezelH, bezelR);
+        if (inBezel) {
+          const shade = 59 + Math.floor(Math.random() * 6);
+          targets.push({ x, y, color: `rgb(${shade},${shade},${shade + 4})` });
+          continue;
+        }
+
+        // Check base
+        const inBase = inRoundedRect(x, y - baseCy, baseW, baseH, baseR);
+        if (inBase) {
+          const shade = 64 + Math.floor(Math.random() * 5);
+          targets.push({ x, y, color: `rgb(${shade},${shade},${shade + 3})` });
+          continue;
+        }
+      }
+    }
+
+    // Create particles
+    const particles = targets.map(t => {
+      const side = Math.floor(Math.random() * 4);
+      let sx, sy;
+      const margin = 100;
+      if (side === 0) { sx = Math.random() * canvas.width; sy = -margin; }
+      else if (side === 1) { sx = Math.random() * canvas.width; sy = canvas.height + margin; }
+      else if (side === 2) { sx = -margin; sy = Math.random() * canvas.height; }
+      else { sx = canvas.width + margin; sy = Math.random() * canvas.height; }
+
+      return {
+        sx, sy,
+        tx: cx + t.x * S,
+        ty: cy + t.y * S,
+        x: sx, y: sy,
+        color: t.color,
+        delay: Math.random() * 0.35
+      };
+    });
+
+    function easeInOutCubic(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    let startTime = null;
+    let phase = 'assemble';
+    let splashNotified = false;
+
+    function animate(timestamp) {
+      if (!startTime) startTime = timestamp;
+      const elapsed = timestamp - startTime;
+
+      if (phase === 'assemble') {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let allDone = true;
+
+        for (const p of particles) {
+          const pElapsed = Math.max(0, elapsed - p.delay * ASSEMBLE_DURATION);
+          const progress = Math.min(1, pElapsed / ASSEMBLE_DURATION);
+          const eased = easeInOutCubic(progress);
+
+          p.x = p.sx + (p.tx - p.sx) * eased;
+          p.y = p.sy + (p.ty - p.sy) * eased;
+
+          if (progress < 1) allDone = false;
+
+          ctx.globalAlpha = 0.4 + 0.6 * progress;
+          ctx.fillStyle = p.color;
+          ctx.fillRect(p.x - PS / 2, p.y - PS / 2, PS, PS);
+        }
+        ctx.globalAlpha = 1;
+
+        if (allDone) {
+          phase = 'reveal';
+          startTime = timestamp;
+        }
+      } else if (phase === 'reveal') {
+        const laptopEl = document.getElementById('laptop');
+        laptopEl.style.left = (cx - baseW / 2) + 'px';
+        laptopEl.style.top = (cy - totalH / 2) + 'px';
+        // Start crossfade — show laptop, canvas fades out over CROSSFADE_DURATION
+        laptopEl.style.opacity = 1;
+        document.getElementById('loadingDots').style.opacity = 1;
+        phase = 'crossfade';
+        startTime = timestamp;
+      } else if (phase === 'crossfade') {
+        const progress = Math.min(1, elapsed / CROSSFADE_DURATION);
+        // Fade out the particle canvas smoothly
+        canvas.style.opacity = 1 - progress;
+        if (progress >= 1) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          canvas.style.opacity = 1;
+          phase = 'blink-wait';
+          startTime = timestamp;
+        }
+      } else if (phase === 'blink-wait') {
+        if (elapsed >= 2000) {
+          document.getElementById('loadingDots').style.opacity = 0;
+          phase = 'cursor-in';
+          startTime = timestamp;
+        }
+      } else if (phase === 'cursor-in') {
+        const progress = Math.min(1, elapsed / CURSOR_ENTER_DURATION);
+        const eased = easeInOutCubic(progress);
+        const cursorEl = document.getElementById('cursor');
+        cursorEl.style.visibility = 'visible';
+
+        const startX = 280, startY = 220;
+        const endX = 100, endY = 60;
+        const curX = startX + (endX - startX) * eased;
+        const curY = startY + (endY - startY) * eased;
+        cursorEl.style.opacity = Math.min(1, progress * 3);
+        cursorEl.style.transform = `translate(${curX}px, ${curY}px) scale(1)`;
+
+        if (progress >= 1) {
+          phase = 'cursor-pause';
+          startTime = timestamp;
+        }
+      } else if (phase === 'cursor-pause') {
+        if (elapsed >= CURSOR_PAUSE) {
+          phase = 'click';
+          startTime = timestamp;
+        }
+      } else if (phase === 'click') {
+        const progress = Math.min(1, elapsed / CURSOR_CLICK_DURATION);
+        const cursorEl = document.getElementById('cursor');
+        const scale = progress < 0.5
+          ? 1 - 0.2 * (progress / 0.5)
+          : 0.8 + 0.2 * ((progress - 0.5) / 0.5);
+        cursorEl.style.transform = `translate(100px, 60px) scale(${scale})`;
+
+        if (progress >= 1) {
+          phase = 'glow';
+          startTime = timestamp;
+        }
+      } else if (phase === 'glow') {
+        const progress = Math.min(1, elapsed / GLOW_DURATION);
+        const glowEl = document.getElementById('edgeGlow');
+        const cursorEl = document.getElementById('cursor');
+
+        // Glow fades in then holds
+        let glowOpacity;
+        if (progress < 0.3) glowOpacity = progress / 0.3;
+        else glowOpacity = 1;
+        glowEl.style.opacity = glowOpacity;
+
+        // Cursor fades out during glow
+        const cursorFade = Math.min(1, progress / 0.5);
+        cursorEl.style.opacity = 1 - cursorFade;
+        if (cursorFade >= 1) cursorEl.style.visibility = 'hidden';
+
+        if (progress >= 1) {
+          cursorEl.style.opacity = 0;
+          cursorEl.style.visibility = 'hidden';
+          phase = 'zoom-fade';
+          startTime = timestamp;
+        }
+      } else if (phase === 'zoom-fade') {
+        // PC zooms in (diving into screen) and fades to blank white
+        const progress = Math.min(1, elapsed / ZOOM_FADE_DURATION);
+        const eased = easeInOutCubic(progress);
+        const laptopEl = document.getElementById('laptop');
+        const glowEl = document.getElementById('edgeGlow');
+
+        const scale = 1 + eased * 2.5;
+        laptopEl.style.transform = `scale(${S * scale})`;
+        laptopEl.style.opacity = 1 - eased;
+        glowEl.style.opacity = 1 - eased;
+
+        // Notify parent early so main app fades in while dive is finishing
+        if (progress >= 0.6 && !splashNotified) {
+          splashNotified = true;
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage('splashDone', '*');
+          }
+        }
+
+        if (progress >= 1) {
+          return; // Stop the animation loop
+        }
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    });
+  </script>
+
+</body>
+</html>
