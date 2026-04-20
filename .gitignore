@@ -93,6 +93,10 @@ _embedded_resources.py
 *.exe
 *.ico
 
+# Exceptions: keep these tracked even though they match the broad rules above
+!Interception/command line installer/install-interception.exe
+!frontend/background.mp4
+
 # Certificates
 cert/
 certs/
@@ -103,19 +107,6 @@ certs/
 *.pfx
 *.p12
 
-# -----------------------------------------------------------------------------
-# Private UI and build files — DO NOT COMMIT
-# -----------------------------------------------------------------------------
-# The UI layer and binary build scripts are not part of the open-source core.
-# They are maintained separately in a private workspace and are only used to
-# produce release binaries, which are published on the website and in the
-# GitHub Releases page of this repo.
-#
-# Do not edit, add, or commit these files here. If you need to change them,
-# work in the private workspace and publish a new binary release from there.
-# -----------------------------------------------------------------------------
-mac_app.py
+
 mac_binary_build.py
-windows_app.py
 windows_binary_build.py
-frontend/
