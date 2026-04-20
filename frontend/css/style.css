@@ -1,0 +1,2012 @@
+:root {
+    /* LOGIC: Single source of truth for dimensions to ensure consistency */
+    --glass-radius: clamp(12px, 1.5vw, 16px);
+    --expanded-height: 130px;
+}
+
+/* WebKit click responsiveness — eliminates tap delay and ghost highlights */
+button, input, textarea, select, a, [role="button"],
+.glass-button-wrapper, .settings-btn, .stop-agent-button,
+.model-option, .provider-item, .settings-save-btn,
+.settings-delete-btn, .gcp-vertex-btn, .vertex-done-btn {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+/* Splash Screen */
+.splash-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 99999;
+    background: #000000;
+    opacity: 1;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    transition: opacity 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.splash-overlay.fade-out {
+    opacity: 0;
+    pointer-events: none;
+}
+#splashFrame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #000000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Image Stream Container - Fully Responsive with Liquid Glass */
+.image-stream-container {
+    position: fixed;
+    left: clamp(10px, 2vw, 30px);
+    top: 50%;
+    transform: translateY(-50%) scale(0.95);
+    width: clamp(300px, 45vw, min(800px, 45vw));
+    aspect-ratio: 16 / 9;
+    border-radius: clamp(12px, 2vw, 20px);
+    box-shadow: 0 clamp(4px, 1vw, 8px) clamp(16px, 3vw, 32px) rgba(0, 0, 0, 0.1);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    padding: clamp(8px, 1.2vw, 16px);
+}
+
+/* Liquid Glass Layers */
+.liquidGlass-effect {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    backdrop-filter: blur(8px) saturate(180%);
+    -webkit-backdrop-filter: blur(8px) saturate(180%);
+    filter: url(#liquid-glass-button);
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.liquidGlass-tint {
+    z-index: 1;
+    position: absolute;
+    inset: 0;
+    background: rgba(200, 200, 200, 0.3);
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.liquidGlass-shine {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: inset clamp(1px, 0.3vw, 2px) clamp(1px, 0.3vw, 2px) clamp(0.5px, 0.2vw, 1px) 0 rgba(255, 255, 255, 0.6),
+                inset clamp(-0.5px, -0.2vw, -1px) clamp(-0.5px, -0.2vw, -1px) clamp(0.5px, 0.2vw, 1px) clamp(0.5px, 0.2vw, 1px) rgba(255, 255, 255, 0.6);
+}
+
+.liquidGlass-content {
+    z-index: 3;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-stream-container.agent-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(-50%) scale(1);
+}
+
+.image-stream-container:hover {
+    box-shadow: 0 clamp(6px, 1.5vw, 12px) clamp(20px, 4vw, 40px) rgba(0, 0, 0, 0.15);
+}
+
+/* Stream Image - Responsive Fit */
+.stream-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    border-radius: clamp(8px, 1.5vw, 14px);
+    box-shadow: 0 clamp(2px, 0.5vw, 4px) clamp(8px, 1.5vw, 16px) rgba(0, 0, 0, 0.15);
+}
+
+/* Globe Container - Positioned OUTSIDE and ABOVE image container */
+.main-globe-container {
+    position: fixed;
+    /* Same left and width as image container - globe centers via flexbox */
+    left: clamp(10px, 2vw, 30px);
+    width: clamp(300px, 45vw, min(800px, 45vw));
+    
+    /* Globe height - bigger to fill space */
+    height: clamp(180px, 25vw, 320px);
+    
+    /* TOP edge aligns with LLM button TOP edge (same calculation as button) */
+    top: calc(clamp(30px, 4vw, 60px) + clamp(16px, 2vw, 24px));
+    
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    /* Initially hidden */
+    opacity: 0;
+    transform: translateY(20px) scale(0.9);
+    pointer-events: none;
+    
+    /* Smooth transitions */
+    transition: opacity 0.6s cubic-bezier(0.25, 0.8, 0.25, 1),
+                transform 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.main-globe-container.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+/* Ensure Three.js canvas is transparent */
+.main-globe-container canvas {
+    background: transparent !important;
+}
+
+/* Image container shift animation - entire container moves down */
+.image-stream-container {
+    transition: transform 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.image-stream-container.agent-visible.web-active {
+    /* Shift down to sit just below the globe with small gap */
+    transform: translateY(calc(-50% + clamp(120px, 16vw, 220px)));
+}
+
+.image-stream-container.agent-visible.shell-active {
+    /* Shift down to sit just below the shell terminal card */
+    transform: translateY(calc(-50% + clamp(120px, 16vw, 220px)));
+}
+
+/* ── Shell Terminal Container ── */
+.shell-terminal-container {
+    position: fixed;
+    left: clamp(10px, 2vw, 30px);
+    width: clamp(300px, 45vw, min(800px, 45vw));
+    height: clamp(180px, 25vw, 320px);
+    top: calc(clamp(30px, 4vw, 60px) + clamp(16px, 2vw, 24px));
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(20px) scale(0.9);
+    pointer-events: none;
+    transition: opacity 0.6s cubic-bezier(0.25, 0.8, 0.25, 1),
+                transform 0.6s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.shell-terminal-container.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+/* Terminal card */
+.shell-terminal-card {
+    width: clamp(280px, 80%, 380px);
+    border-radius: 18px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.03);
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.shell-term-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.02));
+}
+
+.shell-term-bar .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(90, 90, 90, 0.35);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.shell-term-title {
+    margin-left: auto;
+    font: 700 12px/1 ui-sans-serif, system-ui;
+    color: rgba(70, 70, 70, 0.95);
+    letter-spacing: 0.2px;
+}
+
+.shell-term-body {
+    padding: 14px 14px 16px;
+    color: rgba(60, 60, 60, 0.95);
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.shell-term-body .line {
+    margin: 6px 0;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+#shellStreamLine,
+#shellStatusLine {
+    max-height: 6.2em;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+#shellStreamLine::-webkit-scrollbar,
+#shellStatusLine::-webkit-scrollbar {
+    display: none;
+}
+
+.shell-term-body .line.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.shell-term-body .line b {
+    color: rgba(50, 50, 50, 0.95);
+}
+
+.shell-term-body .muted {
+    color: rgba(90, 90, 90, 0.85);
+}
+
+.shell-term-body .tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 6px;
+    margin-right: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    background: rgba(0, 0, 0, 0.04);
+    font-weight: 800;
+    font-size: 11px;
+    color: rgba(60, 60, 60, 0.95);
+}
+
+.shell-term-body .tag.ok {
+    box-shadow: 0 0 22px rgba(90, 90, 90, 0.2);
+}
+
+.shell-term-body .tag.run {
+    box-shadow: 0 0 22px rgba(90, 90, 90, 0.2);
+}
+
+.shell-term-body .tag.fail {
+    box-shadow: 0 0 22px rgba(90, 90, 90, 0.2);
+}
+
+.shell-term-body .cursor {
+    display: inline-block;
+    width: 10px;
+    height: 14px;
+    margin-left: 8px;
+    border-radius: 3px;
+    background: rgba(90, 90, 90, 0.75);
+    opacity: 0.65;
+    animation: shell-blink 1s steps(2, end) infinite;
+}
+
+.shell-progress {
+    margin-top: 12px;
+    height: 8px;
+    border-radius: 999px;
+    position: relative;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.09);
+}
+
+.shell-progress .fill {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(90, 90, 90, 0), rgba(90, 90, 90, 0.4), rgba(90, 90, 90, 0.4), rgba(90, 90, 90, 0));
+    transform: translateX(-70%);
+    animation: shell-flow 1.05s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.shell-progress .glint {
+    position: absolute;
+    inset: -30% -40%;
+    background: linear-gradient(110deg, transparent 0%, rgba(90, 90, 90, 0.15) 22%, rgba(90, 90, 90, 0.3) 28%, transparent 40%);
+    transform: translateX(-55%);
+    animation: shell-glint 1.05s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+    mix-blend-mode: normal;
+}
+
+@keyframes shell-flow {
+    0% { transform: translateX(-75%); opacity: 0.55; }
+    50% { opacity: 1; }
+    100% { transform: translateX(75%); opacity: 0.55; }
+}
+
+@keyframes shell-glint {
+    0% { transform: translateX(-60%); opacity: 0; }
+    20% { opacity: 1; }
+    100% { transform: translateX(60%); opacity: 0; }
+}
+
+@keyframes shell-blink {
+    0% { opacity: 0.2; }
+    50% { opacity: 0.85; }
+    100% { opacity: 0.2; }
+}
+
+/* --------------------------------------------------------------
+   Liquid Glass Dropdown Button & Wrappers
+   --------------------------------------------------------------
+*/
+.glass-button-wrapper {
+    position: fixed;
+
+    /* Initial centered state — aligns with centered chat container */
+    left: calc(50% - clamp(600px, 65vw, 1000px) / 2 + clamp(16px, 2vw, 24px));
+
+    /* Top position: chat container top + padding */
+    top: calc(clamp(30px, 4vw, 60px) + clamp(16px, 2vw, 24px));
+
+    transform: none;
+    width: auto;
+
+    padding: clamp(4px, 0.5vw, 6px) clamp(10px, 1.2vw, 14px);
+
+    height: clamp(22px, 2.5vw, 28px);
+
+    border-radius: clamp(10px, 1.5vw, 14px);
+
+    /* Allow sub-menu to flow out */
+    overflow: hidden;
+
+    cursor: pointer;
+    z-index: 15;
+    box-shadow: 0 clamp(3px, 0.8vw, 6px) clamp(12px, 2.5vw, 24px) rgba(0, 0, 0, 0.1);
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+
+    transition: left 0.5s cubic-bezier(0.25, 0.8, 0.25, 1),
+                height 0.4s cubic-bezier(0.25, 0.8, 0.25, 1),
+                box-shadow 0.3s ease,
+                border-radius 0.4s ease;
+}
+
+.glass-button-wrapper.split-layout {
+    left: calc(clamp(10px, 2vw, 30px) + clamp(300px, 45vw, min(800px, 45vw)) + clamp(20px, 4vw, 60px) + clamp(16px, 2vw, 24px));
+}
+
+/* Expanded state - Uses Variables for Consistency */
+.glass-button-wrapper.expanded {
+    /* height is set by JS for smooth transition */
+    overflow: visible;
+    border-radius: var(--glass-radius); /* Matches Sub-menu */
+    box-shadow: 0 clamp(6px, 1.5vw, 12px) clamp(20px, 4vw, 40px) rgba(0, 0, 0, 0.2);
+    z-index: 20;
+}
+
+/* Shared Liquid Layers (Used for Main Button AND Sub-Menus) */
+.liquidGlass-effect-btn {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    backdrop-filter: blur(8px) saturate(180%);
+    -webkit-backdrop-filter: blur(8px) saturate(180%);
+    filter: url(#liquid-glass-button);
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.liquidGlass-tint-btn {
+    z-index: 1;
+    position: absolute;
+    inset: 0;
+    background: rgba(200, 200, 200, 0.15);
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.liquidGlass-shine-btn {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: inset clamp(1px, 0.3vw, 2px) clamp(1px, 0.3vw, 2px) clamp(0.5px, 0.2vw, 1px) 0 rgba(255, 255, 255, 0.8),
+                inset clamp(-0.5px, -0.2vw, -1px) clamp(-0.5px, -0.2vw, -1px) clamp(0.5px, 0.2vw, 1px) clamp(0.5px, 0.2vw, 1px) rgba(255, 255, 255, 0.4);
+}
+
+/* --------------------------------------------------------------
+   Unified Font Styling
+   --------------------------------------------------------------
+*/
+.glass-button-content span, 
+.provider-item, 
+.provider-item span,
+.model-option,
+.chat-input {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(12px, 1.2vw, 14px); 
+    font-weight: 500; 
+    color: rgba(90, 90, 90, 0.95); 
+    text-shadow: 0 0.5px 1px rgba(255, 255, 255, 0.3);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+/* The Main Label Wrapper */
+.glass-button-content {
+    position: relative; 
+    width: 100%;
+    height: clamp(22px, 2.5vw, 28px); 
+    min-height: clamp(22px, 2.5vw, 28px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    pointer-events: none; 
+    margin-bottom: 2px;
+}
+
+/* Current Selection Display */
+.current-selection {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.selection-text {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(12px, 1.2vw, 14px); 
+    font-weight: 500; 
+    color: rgba(90, 90, 90, 0.95); 
+    text-shadow: 0 0.5px 1px rgba(255, 255, 255, 0.3);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.selection-icon {
+    width: 18px; 
+    height: 18px;
+    fill: #ff9f00; /* Neon Orange */
+    opacity: 0.9;
+    flex-shrink: 0;
+    color: #ff9f00;
+    filter: drop-shadow(0 0 4px #ff9f00) drop-shadow(0 0 8px rgba(255, 159, 0, 0.5));
+    animation: breathe-neon-orange 3s ease-in-out infinite;
+}
+
+@keyframes breathe-neon-orange {
+    0%, 100% {
+        /* Grey state */
+        fill: rgba(90, 90, 90, 0.95);
+        color: rgba(90, 90, 90, 0.95);
+        filter: none;
+        transform: scale(1);
+        opacity: 0.8;
+    }
+    50% {
+        /* Neon Orange state */
+        fill: #ff9f00;
+        color: #ff9f00;
+        filter: drop-shadow(0 0 6px #ff9f00) drop-shadow(0 0 12px rgba(255, 159, 0, 0.6));
+        transform: scale(1.05);
+        opacity: 1;
+    }
+}
+
+/* Dropdown Options Container */
+.dropdown-options {
+    z-index: 3;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    opacity: 0; 
+    pointer-events: none;
+    transition: opacity 0.2s ease 0s; 
+}
+
+.glass-button-wrapper.expanded .dropdown-options {
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity 0.3s ease 0.2s; 
+}
+
+/* --------------------------------------------------------------
+   Nested Menu Styling 
+   --------------------------------------------------------------
+*/
+
+.provider-item {
+    padding: 6px 12px;
+    border-radius: 6px;
+    width: 100%;
+    text-align: center;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    position: relative; /* Anchor for sub-menu */
+}
+
+.provider-item:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* The Sub-Menu Container - Purely for positioning and hover bridge */
+.sub-menu {
+    position: absolute;
+    top: 0; 
+    left: 100%; 
+    padding-left: 15px; /* The Hover Gap */
+    
+    display: none; 
+    width: auto;
+    height: auto;
+    z-index: 50; 
+}
+
+/* THE INVISIBLE BRIDGE - Keeps menu open when crossing gap */
+.sub-menu::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 15px; 
+    background: transparent;
+    z-index: 10;
+}
+
+/* Show sub-menu when active (managed by JS) */
+.provider-item.active-provider .sub-menu {
+    display: block;
+}
+
+/* All sub-menus start at the same level as the provider and extend downward */
+
+/* The Visual Card - Wraps glass layers and content */
+.sub-menu-card {
+    position: relative;
+    border-radius: var(--glass-radius); 
+    overflow: hidden; 
+    
+    /* Layout */
+    display: flex;
+    flex-direction: column;
+    min-width: 200px;
+}
+
+/* The Content Box inside - Handles Scroll */
+.sub-menu-content {
+    position: relative;
+    z-index: 5; /* Above glass */
+    
+    /* Dynamic Height Logic */
+    max-height: 60vh;
+    
+    overflow-y: auto; 
+    
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    
+    /* Hide Scrollbar */
+    scrollbar-width: none; 
+    -ms-overflow-style: none;
+}
+
+.sub-menu-content::-webkit-scrollbar { 
+    display: none; 
+}
+
+/* The Model Options - Updated for Icon Alignment */
+.model-option {
+    padding: 4px 10px;
+    border-radius: 4px;
+    text-align: left;
+    cursor: pointer;
+    position: relative;
+    
+    /* Flexbox to separate Text and Icon */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px; /* Minimum space between text and icon */
+    white-space: normal;
+}
+
+.model-option:hover {
+    background-color: rgba(255, 255, 255, 0.4);
+    color: #000;
+}
+
+/* The SVG Icon Styling */
+.model-icon {
+    width: 22px; 
+    height: 22px;
+    /* Uses inherited color from .model-option */
+    fill: currentColor; 
+    flex-shrink: 0; /* Prevents squishing */
+    opacity: 0.9;
+}
+
+/* --------------------------------------------------------------
+   Settings Button - Circular Liquid Glass
+   --------------------------------------------------------------
+*/
+.settings-btn {
+    position: fixed;
+    /* Left is set dynamically by JS to follow LLM button width */
+    left: 0;
+    top: calc(clamp(30px, 4vw, 60px) + clamp(16px, 2vw, 24px));
+    transition: left 0.3s ease;
+    
+    width: clamp(30px, 3vw, 36px);
+    height: clamp(30px, 3vw, 36px);
+    border-radius: 50%;
+    
+    cursor: pointer;
+    z-index: 15;
+    overflow: hidden;
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    box-shadow: 0 clamp(3px, 0.8vw, 6px) clamp(12px, 2.5vw, 24px) rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.settings-btn:hover {
+    transform: scale(1.08);
+    box-shadow: 0 clamp(4px, 1vw, 8px) clamp(16px, 3vw, 28px) rgba(0, 0, 0, 0.15);
+}
+
+.settings-icon-wrapper {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.settings-icon {
+    width: clamp(16px, 1.8vw, 20px);
+    height: clamp(16px, 1.8vw, 20px);
+    color: rgba(90, 90, 90, 0.85);
+    transition: transform 0.4s ease;
+}
+
+.settings-btn:hover .settings-icon {
+    transform: rotate(45deg);
+}
+
+/* --------------------------------------------------------------
+   Settings Panel Overlay
+   --------------------------------------------------------------
+*/
+.settings-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 100;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.settings-overlay.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.settings-panel {
+    position: relative;
+    width: clamp(340px, 90vw, 440px);
+    padding: clamp(24px, 3vw, 32px);
+    border-radius: clamp(16px, 2vw, 24px);
+    
+    transform: scale(0.9) translateY(20px);
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    
+    box-shadow: 0 clamp(8px, 2vw, 16px) clamp(32px, 6vw, 64px) rgba(0, 0, 0, 0.2);
+}
+
+.settings-overlay.active .settings-panel {
+    transform: scale(1) translateY(0);
+}
+
+.settings-panel-content {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(18px, 2.2vw, 24px);
+}
+
+/* Settings Views — only active view is visible */
+.settings-view {
+    display: none;
+    flex-direction: column;
+    gap: clamp(18px, 2.2vw, 24px);
+}
+
+.settings-view.active {
+    display: flex;
+}
+
+.settings-header {
+    text-align: center;
+    position: relative;
+}
+
+.settings-close-btn {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.settings-close-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 1);
+}
+
+.settings-title {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(18px, 2vw, 22px);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+}
+
+/* Sub-header with back button */
+.settings-sub-header {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 1vw, 12px);
+}
+
+.settings-back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+    flex-shrink: 0;
+}
+
+.settings-back-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 1);
+}
+
+/* Menu list items */
+.settings-menu-list {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(8px, 1vw, 10px);
+}
+
+.settings-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: clamp(12px, 1.4vw, 16px) clamp(14px, 1.6vw, 18px);
+    border-radius: clamp(10px, 1.2vw, 14px);
+    background: rgba(255, 255, 255, 0.12);
+    cursor: pointer;
+    transition: background 0.2s ease;
+
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(14px, 1.4vw, 16px);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.settings-menu-item:hover {
+    background: rgba(255, 255, 255, 0.22);
+}
+
+.settings-menu-item svg {
+    color: rgba(255, 255, 255, 0.5);
+    flex-shrink: 0;
+}
+
+/* Remote connection */
+.remote-setup {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: clamp(20px, 3vw, 32px) 0;
+}
+
+.remote-qr-container {
+    width: 160px;
+    height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 12px;
+}
+
+.remote-qr-container img,
+.remote-qr-container canvas {
+    border-radius: 6px;
+}
+
+.remote-instruction {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(12px, 1.2vw, 14px);
+    color: rgba(255, 255, 255, 0.45);
+    text-align: center;
+}
+
+.remote-connected {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: clamp(20px, 3vw, 32px) 0;
+}
+
+.remote-status-icon {
+    font-size: 36px;
+    margin-bottom: 4px;
+}
+
+.remote-bot-name {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+    font-size: clamp(14px, 1.4vw, 16px);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.remote-status-label {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(12px, 1.2vw, 13px);
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.remote-disconnect-btn {
+    margin-top: 12px;
+    padding: 8px 24px;
+    border: 1px solid rgba(255, 100, 100, 0.3);
+    border-radius: 10px;
+    background: rgba(255, 100, 100, 0.1);
+    color: rgba(255, 100, 100, 0.85);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(12px, 1.2vw, 13px);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.remote-disconnect-btn:hover {
+    background: rgba(255, 100, 100, 0.2);
+    color: rgba(255, 100, 100, 0.95);
+}
+
+.settings-provider-list {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(10px, 1.2vw, 14px);
+}
+
+.settings-provider-row {
+    display: flex;
+    align-items: center;
+    gap: clamp(10px, 1.2vw, 14px);
+}
+
+.settings-provider-name {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(12px, 1.2vw, 14px);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    min-width: clamp(80px, 10vw, 100px);
+    white-space: nowrap;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.settings-provider-name:hover {
+    color: rgba(255, 255, 255, 1);
+    text-decoration: underline;
+}
+
+.settings-provider-input {
+    flex: 1;
+    height: clamp(36px, 3.5vw, 42px);
+    padding: 0 clamp(10px, 1.2vw, 14px);
+    
+    border: none;
+    border-radius: clamp(8px, 1vw, 12px);
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+    font-size: clamp(12px, 1.2vw, 14px);
+    color: rgba(255, 255, 255, 0.95);
+    
+    outline: none;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settings-provider-input:focus {
+    background: rgba(255, 255, 255, 0.35);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 2px rgba(120, 100, 180, 0.3);
+}
+
+.settings-provider-input::placeholder {
+    color: rgba(90, 90, 90, 0.5);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.settings-delete-btn {
+    width: clamp(28px, 3vw, 34px);
+    height: clamp(28px, 3vw, 34px);
+    flex-shrink: 0;
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    
+    color: rgba(255, 255, 255, 0.6);
+    transition: color 0.2s ease, background 0.2s ease;
+}
+
+.settings-delete-btn svg {
+    width: clamp(14px, 1.5vw, 18px);
+    height: clamp(14px, 1.5vw, 18px);
+}
+
+.settings-delete-btn:hover {
+    color: rgba(255, 100, 100, 0.95);
+    background: rgba(255, 100, 100, 0.15);
+}
+
+.settings-provider-input:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.settings-provider-input:disabled::placeholder {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.settings-save-btn {
+    width: 100%;
+    height: clamp(40px, 3.8vw, 48px);
+    
+    border: none;
+    border-radius: clamp(10px, 1.2vw, 14px);
+    background: linear-gradient(135deg, rgba(120, 100, 180, 0.8), rgba(150, 120, 200, 0.8));
+    
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(14px, 1.4vw, 16px);
+    font-weight: 600;
+    color: white;
+    
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 12px rgba(120, 100, 180, 0.3);
+}
+
+.settings-save-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(120, 100, 180, 0.4);
+}
+
+.settings-save-btn:active {
+    transform: translateY(0);
+}
+
+/* Google row — narrower key input to fit GCP Vertex button */
+.google-key-input {
+    flex: 0.65;
+}
+
+/* GCP Vertex button in settings row */
+.gcp-vertex-btn {
+    flex-shrink: 0;
+    height: clamp(28px, 3vw, 34px);
+    padding: 0 clamp(8px, 1vw, 12px);
+    
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(10px, 1vw, 12px);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.8);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.gcp-vertex-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 1);
+}
+
+.gcp-vertex-btn.configured {
+    background: rgba(100, 180, 120, 0.25);
+    border-color: rgba(100, 180, 120, 0.4);
+    color: rgba(180, 255, 200, 0.95);
+}
+
+/* --------------------------------------------------------------
+   Vertex AI Popup Overlay
+   -------------------------------------------------------------- */
+.vertex-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 200;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.vertex-overlay.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.vertex-popup {
+    position: relative;
+    width: clamp(300px, 80vw, 380px);
+    padding: clamp(20px, 2.5vw, 28px);
+    border-radius: clamp(14px, 1.8vw, 20px);
+    
+    transform: scale(0.9) translateY(20px);
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 clamp(8px, 2vw, 16px) clamp(32px, 6vw, 64px) rgba(0, 0, 0, 0.2);
+}
+
+.vertex-overlay.active .vertex-popup {
+    transform: scale(1) translateY(0);
+}
+
+.vertex-popup-content {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(14px, 1.8vw, 18px);
+}
+
+.vertex-popup-title {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(16px, 1.8vw, 20px);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+    text-align: center;
+}
+
+.vertex-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.vertex-label {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(11px, 1.1vw, 13px);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.vertex-input {
+    height: clamp(36px, 3.5vw, 42px);
+    padding: 0 clamp(10px, 1.2vw, 14px);
+    
+    border: none;
+    border-radius: clamp(8px, 1vw, 12px);
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+    font-size: clamp(12px, 1.2vw, 14px);
+    color: rgba(255, 255, 255, 0.95);
+    
+    outline: none;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.vertex-input:focus {
+    background: rgba(255, 255, 255, 0.35);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 2px rgba(120, 100, 180, 0.3);
+}
+
+.vertex-input::placeholder {
+    color: rgba(90, 90, 90, 0.5);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Location field — muted default value style */
+.vertex-location-input {
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.vertex-location-input:focus,
+.vertex-location-input.edited {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.vertex-done-btn {
+    width: 100%;
+    height: clamp(38px, 3.5vw, 44px);
+    
+    border: none;
+    border-radius: clamp(10px, 1.2vw, 14px);
+    background: linear-gradient(135deg, rgba(120, 100, 180, 0.8), rgba(150, 120, 200, 0.8));
+    
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(13px, 1.3vw, 15px);
+    font-weight: 600;
+    color: white;
+    
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 12px rgba(120, 100, 180, 0.3);
+}
+
+.vertex-done-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(120, 100, 180, 0.4);
+}
+
+.vertex-done-btn:active {
+    transform: translateY(0);
+}
+
+/* --------------------------------------------------------------
+   Specific Component Positioning (NEW)
+   --------------------------------------------------------------
+*/
+
+/* Chat Container - Big vertical rectangle with equal gaps */
+.chat-container-wrapper {
+    position: fixed;
+    /* Gap size - same as image container's left gap */
+    --gap-size: clamp(10px, 2vw, 30px);
+    /* Space between image and chat container - increasing this explicitly */
+    --middle-gap: clamp(20px, 4vw, 60px);
+
+    /* Image container left position */
+    --image-left: clamp(10px, 2vw, 30px);
+    /* Image container width */
+    --image-width: clamp(300px, 45vw, min(800px, 45vw));
+
+    /* Initial centered state */
+    left: 50%;
+    right: auto;
+    width: clamp(600px, 65vw, 1000px);
+    transform: translateX(-50%);
+
+    bottom: clamp(30px, 4vw, 50px);
+    top: clamp(30px, 4vw, 60px);
+    border-radius: var(--glass-radius);
+    z-index: 12;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: clamp(16px, 2vw, 24px);
+    box-shadow: 0 clamp(4px, 1vw, 8px) clamp(16px, 3vw, 32px) rgba(0, 0, 0, 0.1);
+
+    transition: left 0.5s cubic-bezier(0.25, 0.8, 0.25, 1),
+                right 0.5s cubic-bezier(0.25, 0.8, 0.25, 1),
+                width 0.5s cubic-bezier(0.25, 0.8, 0.25, 1),
+                transform 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.chat-container-wrapper.split-layout {
+    left: calc(var(--image-left) + var(--image-width) + var(--middle-gap));
+    right: var(--gap-size);
+    width: auto;
+    transform: none;
+}
+
+.chat-container-content {
+    position: relative;
+    z-index: 3;
+    width: 100%;
+    height: 100%; /* Fill the wrapper */
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+
+/* Wrapper for input to allow side-by-side button */
+.input-area-wrapper {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+}
+
+/* New Output Stream Area - Blurry container above input */
+.output-stream-area {
+    position: relative;
+    flex: 1; /* Take up remaining space */
+    width: 100%;
+    margin-bottom: clamp(12px, 1.5vw, 16px); /* Space above input */
+    margin-top: clamp(40px, 4vw, 50px); /* Reduced Space below LLM button */
+    
+    /* Same blurred style as chat input */
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: clamp(16px, 2vw, 20px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    
+    /* Scrollable content */
+    overflow-y: auto;
+    overflow-x: hidden;
+    
+    /* Hide scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+/* Welcome overlay - eyes + breathing glow */
+.welcome-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 80px;
+    padding-bottom: 25%;
+    z-index: 5;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+}
+
+.welcome-overlay.eyes-hidden .welcome-eye {
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+.welcome-overlay.hidden {
+    opacity: 0;
+}
+
+.welcome-eye {
+    width: 24px;
+    height: 58px;
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(160, 160, 170, 0.5) 0%, rgba(120, 120, 135, 0.5) 100%);
+    animation: welcomeBlink 4s ease-in-out infinite;
+}
+
+@keyframes welcomeBlink {
+    0%, 85%, 100% { transform: scaleY(1); }
+    92% { transform: scaleY(0.1); }
+}
+
+.welcome-glow {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: inset 0 0 50px rgba(220, 160, 255, 0.45),
+                inset 0 0 100px rgba(240, 200, 255, 0.25);
+    animation: welcomeBreathe 3s ease-in-out infinite;
+}
+
+@keyframes welcomeBreathe {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+}
+
+.output-stream-area::-webkit-scrollbar {
+    display: none;
+}
+
+/* Milestone Stream Container */
+.milestone-stream {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(8px, 1vw, 12px);
+    padding: clamp(12px, 1.5vw, 18px);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Individual Milestone Line */
+.milestone-line {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(12px, 1.2vw, 14px);
+    font-weight: 500;
+    color: rgba(70, 70, 70, 0.95);
+    line-height: 1.5;
+    
+    /* Auto-wrap behavior */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    
+    /* Subtle left accent */
+    padding-left: clamp(10px, 1.2vw, 14px);
+    border-left: 2px solid rgba(150, 120, 200, 0.4);
+}
+
+/* Chat Input Field Styling */
+.chat-input {
+    position: relative; /* For z-index context */
+    z-index: 5; /* Stays on top of the agent strip */
+    width: 100%;
+    /* Reset height to single line */
+    height: clamp(44px, 4vw, 54px);
+    min-height: clamp(44px, 4vw, 54px);
+    max-height: 150px;
+    
+    border: none;
+    background: rgba(255, 255, 255, 0.15);
+    outline: none;
+    
+    /* Padding for text area - centered vertically for single line */
+    padding: clamp(12px, 1.2vw, 15px) clamp(50px, 5vw, 60px) clamp(12px, 1.2vw, 15px) clamp(16px, 1.5vw, 20px);
+    box-sizing: border-box; /* Ensure padding is included in width */
+    
+    /* Transition border radius for join effect */
+    border-radius: clamp(12px, 1.5vw, 16px);
+    transition: border-radius 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+
+    pointer-events: auto;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(13px, 1.3vw, 15px);
+    color: rgba(60, 60, 60, 0.95);
+    font-weight: 500;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    
+    /* Textarea specific styles */
+    resize: none; 
+    overflow-y: auto; 
+    line-height: 1.4;
+    display: block;
+    
+    /* Word wrapping */
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    
+    /* Hide Scrollbar */
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+}
+
+/* When agent strip is active, we keep the corners rounded now - Rules removed */
+
+.chat-input::-webkit-scrollbar {
+    display: none; /* Chrome/Safari/Opera */
+}
+
+/* Keyframes for the gradient animation */
+@keyframes gradientFlow {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* Breathing animation */
+@keyframes cursorBreathing {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(0.85); }
+}
+
+/* Custom cursor icon in agent strip */
+.agent-cursor-icon {
+    width: 14px;
+    height: 14px;
+    margin-right: 8px; /* Space between icon and text */
+    
+    /* Animated Gradient Background */
+    background: linear-gradient(135deg, #c17fef, #9b5dcf, #e18ed6, #7f9cf5, #c17fef);
+    background-size: 250% 250%;
+    animation: gradientFlow 6s ease infinite, cursorBreathing 2s ease-in-out infinite;
+    
+    /* Masking with the SVG shape */
+    mask-image: url('data:image/svg+xml;utf8,<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2,2 L12,22 L22,2 Q12,12 2,2 Z" fill="black" transform="rotate(140 12 12)" /></svg>');
+    -webkit-mask-image: url('data:image/svg+xml;utf8,<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2,2 L12,22 L22,2 Q12,12 2,2 Z" fill="black" transform="rotate(140 12 12)" /></svg>');
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    
+    flex-shrink: 0;
+}
+
+/* Agent Response Strip - Initially hidden, slides up */
+.agent-response-strip {
+    /* Centered and shorter than text box */
+    width: 85%;
+    margin: 0 auto; /* Centers horizontally */
+    
+    /* Start with 0 height and no padding */
+    height: 0;
+    min-height: 0;
+    padding: 0;
+    margin-bottom: 0;
+    
+    /* Whitish-Grey background */
+    background: rgba(220, 220, 220, 0.35); 
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    
+    /* Rounded corners all around */
+    border-radius: 16px;
+    
+    display: flex;
+    align-items: center;
+    
+    /* Animation handling */
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(10px);
+    overflow: visible; /* Visible for pseudo-elements */
+    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    position: relative; /* For pseudo-elements */
+
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(10px, 1vw, 11px); /* Reduced text size significantly */
+    color: rgba(50, 50, 50, 0.95);
+
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Connectors removed as requested */
+
+.agent-response-strip.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+    /* Expand to full height when active */
+    height: clamp(28px, 3vw, 34px); /* Reduced height by roughly 1/3 */
+    min-height: clamp(28px, 3vw, 34px);
+    margin-bottom: -18px; /* Only apply negative margin when active */
+    /* Adjusted padding to center text in reduced height */
+    padding: 0 clamp(16px, 1.5vw, 20px) 16px clamp(16px, 1.5vw, 20px);
+}
+
+.agent-label {
+    font-weight: 600;
+    color: rgba(90, 90, 90, 0.95); /* Simple grey like other text */
+    margin-right: 8px;
+    white-space: nowrap;
+    /* Removed neon text shadow */
+}
+
+.agent-text {
+    font-weight: 600;
+    color: rgba(90, 90, 90, 0.95);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-input::placeholder {
+    color: rgba(90, 90, 90, 0.6);
+}
+
+.stop-agent-button {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    
+    width: 42px;
+    height: 42px;
+    flex-shrink: 0;
+    
+    background: transparent;
+    border-radius: 50%;
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    
+    /* Initially Hidden */
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-50%) scale(0.8);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    
+    overflow: visible; /* Allow glow to show */
+    z-index: 20;
+}
+
+.stop-agent-button.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(-50%) scale(1);
+}
+
+.stop-agent-button.pop-vanish {
+    animation: stopPopVanish 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    pointer-events: none;
+    transition: none;
+}
+
+@keyframes stopPopVanish {
+    0%   { transform: translateY(-50%) scale(1); opacity: 1; }
+    30%  { transform: translateY(-50%) scale(1.6); opacity: 1; }
+    100% { transform: translateY(-50%) scale(0); opacity: 0; }
+}
+
+.stop-agent-button:hover {
+    transform: translateY(-50%);
+    filter: brightness(1.2);
+}
+
+.stop-orb {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.stop-circle-1 {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    position: absolute;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: stop-pulse 4.2s ease-in-out infinite 0.3s;
+    z-index: 1;
+}
+.stop-circle-1::before,
+.stop-circle-1::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(8px);
+    width: 30%;
+    height: 30%;
+}
+.stop-circle-1::before { background: #ff0073; top: 30%; right: 30%; }
+.stop-circle-1::after { background: #00baff; bottom: 10%; left: 30%; }
+
+.stop-circle-2 {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    background-color: white;
+    z-index: 9;
+    animation: stop-pulse2 4.2s ease-in-out infinite;
+}
+.stop-circle-2::before,
+.stop-circle-2::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(6px);
+    z-index: 1;
+}
+.stop-circle-2::before { background: #ff0073; width: 30%; height: 30%; top: 20%; right: 20%; }
+.stop-circle-2::after { background: #00bbff; width: 20%; height: 20%; bottom: 10%; left: 40%; }
+
+.stop-bg {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    box-shadow: inset 0 0 5px 2px rgba(255,255,255,0.8), 0 0 2px 2px rgba(255,255,255,0.9);
+    background-color: #9292d8;
+    animation: stop-bgRotate 2.5s linear infinite;
+}
+.stop-bg::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    animation: stop-bgColor 4s linear infinite;
+    box-shadow: inset 0 0 5px 2px rgba(255,255,255,0.8);
+    opacity: 0.2;
+}
+
+.stop-pc {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 32px;
+    height: 32px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    gap: 1px;
+}
+.stop-monitor {
+    width: 12px;
+    height: 10px;
+    background: transparent;
+    border-radius: 1px;
+    padding: 0;
+    border: 1px solid white;
+    box-sizing: border-box;
+    box-shadow: none;
+}
+.stop-screen {
+    width: 100%;
+    height: 100%;
+    background-color: transparent;
+    border-radius: 0.5px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2px;
+    box-shadow: none;
+}
+.stop-eye {
+    width: 1.5px;
+    height: 2.5px;
+    border-radius: 1px;
+    background: white;
+    animation: stop-blink 4s infinite;
+}
+.stop-base {
+    width: 16px;
+    height: 1px;
+    background: white;
+    border-radius: 0.5px;
+}
+
+@keyframes stop-pulse {
+    0%   { transform: scale(0.97); }
+    15%  { transform: scale(1); }
+    30%  { transform: scale(0.98); }
+    45%  { transform: scale(1); }
+    60%  { transform: scale(0.97); }
+    85%  { transform: scale(1); }
+    100% { transform: scale(0.97); }
+}
+@keyframes stop-pulse2 {
+    0%   { transform: scale(1); }
+    15%  { transform: scale(1.03); }
+    30%  { transform: scale(0.98); }
+    45%  { transform: scale(1.04); }
+    60%  { transform: scale(0.97); }
+    85%  { transform: scale(1.03); }
+    100% { transform: scale(1); }
+}
+@keyframes stop-bgRotate {
+    0%   { transform: rotate(0deg); }
+    20%  { transform: rotate(90deg); }
+    40%  { transform: rotate(180deg) scale(0.95,1); }
+    60%, 100% { transform: rotate(360deg); }
+}
+@keyframes stop-bgColor {
+    20% { background-color: red; }
+    40% { background-color: #5eff7e; }
+    60% { background-color: #2cb5ff; }
+    80% { background-color: #fc63ff; }
+}
+@keyframes stop-blink {
+    0%, 85%, 100% { transform: scaleY(1); }
+    92% { transform: scaleY(0.1); }
+}
+
+/* --------------------------------------------------------------
+   API Key Popup Overlay
+   --------------------------------------------------------------
+*/
+.api-key-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 100;
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    /* Hidden by default */
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.api-key-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.api-key-popup {
+    position: relative;
+    width: clamp(320px, 90vw, 420px);
+    padding: clamp(24px, 3vw, 32px);
+    border-radius: clamp(16px, 2vw, 24px);
+    
+    /* Animation */
+    transform: scale(0.9) translateY(20px);
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    
+    box-shadow: 0 clamp(8px, 2vw, 16px) clamp(32px, 6vw, 64px) rgba(0, 0, 0, 0.2);
+}
+
+.api-key-overlay.active .api-key-popup {
+    transform: scale(1) translateY(0);
+}
+
+.api-key-content {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(16px, 2vw, 20px);
+}
+
+.api-key-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+}
+
+.api-key-title {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(18px, 2vw, 22px);
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.api-key-provider {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(12px, 1.2vw, 14px);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.95);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.api-key-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.api-key-input {
+    width: 100%;
+    height: clamp(44px, 4vw, 52px);
+    padding: 0 clamp(44px, 4vw, 52px) 0 clamp(14px, 1.5vw, 18px);
+    
+    border: none;
+    border-radius: clamp(10px, 1.2vw, 14px);
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+    font-size: clamp(13px, 1.3vw, 15px);
+    color: rgba(60, 60, 60, 0.95);
+    
+    outline: none;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.api-key-input:focus {
+    background: rgba(255, 255, 255, 0.35);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1), 0 0 0 2px rgba(120, 100, 180, 0.3);
+}
+
+.api-key-input::placeholder {
+    color: rgba(90, 90, 90, 0.5);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.api-key-toggle {
+    position: absolute;
+    right: clamp(8px, 1vw, 12px);
+    width: clamp(32px, 3vw, 38px);
+    height: clamp(32px, 3vw, 38px);
+    
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    
+    color: rgba(90, 90, 90, 0.6);
+    transition: color 0.2s ease, background 0.2s ease;
+}
+
+.api-key-toggle:hover {
+    color: rgba(90, 90, 90, 0.9);
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.api-key-toggle .eye-icon {
+    width: 20px;
+    height: 20px;
+}
+
+.api-key-submit {
+    width: 100%;
+    height: clamp(44px, 4vw, 52px);
+    
+    border: none;
+    border-radius: clamp(10px, 1.2vw, 14px);
+    background: linear-gradient(135deg, rgba(120, 100, 180, 0.8), rgba(150, 120, 200, 0.8));
+    
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(14px, 1.4vw, 16px);
+    font-weight: 600;
+    color: white;
+    
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    box-shadow: 0 4px 12px rgba(120, 100, 180, 0.3);
+}
+
+.api-key-submit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(120, 100, 180, 0.4);
+}
+
+.api-key-submit:active {
+    transform: translateY(0);
+}
+
+.api-key-submit:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* NEW */
+.api-key-help {
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: clamp(11px, 1.1vw, 13px);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.api-key-help:hover {
+    color: rgba(255, 255, 255, 1);
+}
+
+/* Shake animation for invalid input */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-6px); }
+    80% { transform: translateX(6px); }
+}
+
+/* Background Video */
+#bgVideo {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    min-width: 100vw;
+    min-height: 100vh;
+    transform: translate(-50%, -50%);
+    object-fit: cover;
+    z-index: -1;
+    pointer-events: none;
+}
