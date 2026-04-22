@@ -1,18 +1,4 @@
 #!/usr/bin/env python3
-# Copyright 2026 Ashish Yadav (Autouse AI)
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """
 macOS UI Element Scanner — drop-in replacement for Windows element.py
 Uses macOS Accessibility API via PyObjC.
@@ -61,7 +47,7 @@ from ApplicationServices import (
 # Toggle switches — same semantics as Windows element.py
 SCREENSHOT = True    # Set to False to only generate element tree without screenshot
 DEBUG = False        # Set to True to save files to debug folders, False for direct LLM only
-FRONTEND = True      # Set to True when running from mac_app.py to send images to frontend
+FRONTEND = True      # Set to True when running from app.py to send images to frontend
 
 # Define Rect namedtuple matching Windows format (left, top, right, bottom)
 Rect = namedtuple('Rect', ['left', 'top', 'right', 'bottom'])

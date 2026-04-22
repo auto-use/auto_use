@@ -1,26 +1,20 @@
-# Copyright 2026 Ashish Yadav (Autouse AI)
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+#this main.py give terminal interface to the user to interact with the agent for ui refer app.py
+import platform
 
-from Auto_Use.windows_use.agent.service import AgentService
+if platform.system() == "Darwin":
+    from Auto_Use.macOS_use.agent.service import AgentService
+elif platform.system() == "Windows":
+    from Auto_Use.windows_use.agent.service import AgentService
+else:
+    raise RuntimeError(f"Unsupported OS: {platform.system()}")
 
 # Configuration
 PROVIDER = "perplexity"
-MODEL = "gemini-3.1-pro" #refer to the model name correctly from the Auto_Use/OS_use/llm_provider/view.py from llm provider folder.
+MODEL = "gemini-3-flash" #refer to the model name correctly from the view.py from llm provider folder.
 # Your task here
 task = """
 
-open youtube and playy something
+write hello in milestone
 
 """
 

@@ -88,14 +88,11 @@ sandbox_log.txt
 _embedded_resources.py
 /raw_reasoning
 *.mp4
+!frontend/background.mp4
 /Auto_Use/api_key
 /Auto_Use/windows_use/mcp_tracking
 *.exe
 *.ico
-
-# Exceptions: keep these tracked even though they match the broad rules above
-!Interception/command line installer/install-interception.exe
-!frontend/background.mp4
 
 # Certificates
 cert/
@@ -106,7 +103,8 @@ certs/
 *.cer
 *.pfx
 *.p12
+*.dmg
 
-
-mac_binary_build.py
+# Binary build scripts
 windows_binary_build.py
+mac_binary_build.py
