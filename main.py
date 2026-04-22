@@ -29,7 +29,7 @@ else:
 
 # Configuration
 PROVIDER = "perplexity"
-MODEL = "gemini-3-flash" #refer to the model name correctly from the view.py from llm provider folder.
+MODEL = "gemini-3-flash" #refer to the model name correctly from model_list.txt.
 # Your task here
 task = """
 
