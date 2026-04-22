@@ -108,3 +108,4 @@ certs/
 # Binary build scripts
 windows_binary_build.py
 mac_binary_build.py
+*.icns
