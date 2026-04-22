@@ -47,10 +47,10 @@ MODEL_MAPPINGS = {
         "display_name": "GPT-5.4 Pro",
         "reasoning_support": False
     },
-    "claude-opus-4.6": {
-        "api_name": "anthropic/claude-opus-4.6",
+    "claude-opus-4.7": {
+        "api_name": "anthropic/claude-opus-4.7",
         "vision": True,
-        "display_name": "Claude Opus 4.6",
+        "display_name": "Claude Opus 4.7",
         "reasoning_support": True,
         "reasoning_effort": "low"
     },
@@ -75,10 +75,10 @@ MODEL_MAPPINGS = {
         "reasoning_support": True,
         "reasoning_effort": "low"
     },
-    "kimi-k2.5": {
-        "api_name": "moonshotai/kimi-k2.5",
+    "kimi-k2.6": {
+        "api_name": "moonshotai/kimi-k2.6",
         "vision": True,
-        "display_name": "Kimi K2.5",
+        "display_name": "Kimi K2.6",
         "reasoning_support": False
     }
 }

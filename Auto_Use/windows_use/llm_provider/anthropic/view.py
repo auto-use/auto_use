@@ -26,20 +26,15 @@ MODEL_MAPPINGS = {
         "vision": True,
         "display_name": "Claude Haiku 4.5"
     },
-    "claude-sonnet-4.5": {
-        "api_name": "claude-sonnet-4-5-20250929",
-        "vision": True,
-        "display_name": "Claude Sonnet 4.5"
-    },
     "claude-opus-4.5": {
         "api_name": "claude-opus-4-5-20251101",
         "vision": True,
         "display_name": "Claude Opus 4.5"
     },
-    "claude-opus-4.6": {
-        "api_name": "claude-opus-4-6",
+    "claude-opus-4.7": {
+        "api_name": "claude-opus-4-7",
         "vision": True,
-        "display_name": "Claude Opus 4.6"
+        "display_name": "Claude Opus 4.7"
     },
     "claude-sonnet-4.6": {
         "api_name": "claude-sonnet-4-6",
