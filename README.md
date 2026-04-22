@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/badge/⬇️%20Download%20One--Click%20Setup-2563EB?style=for-the-badge&logoColor=white" alt="Download One-Click Setup" height="44"/>
   </a>
 
-  **🤖 AI-Powered Desktop Automation Framework for macOS & Windows**
+  **🤖 Computer Use Framework for macOS & Windows**
 
   Let AI drive your computer — **Autouse AI — Computer Use**, now with both the macOS and Windows builds combined in a single repository. Control your entire OS with natural language. Browser automation, coding tasks, file management — all powered by vision-language models.
 
