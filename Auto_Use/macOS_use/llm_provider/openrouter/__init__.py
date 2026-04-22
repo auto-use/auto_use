@@ -1,4 +1,4 @@
-# Copyright 2026 Ashish Yadav (Autouse AI)
+# Copyright 2026 Autouse AI — https://github.com/auto-use/Auto-Use
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,6 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# If you build on this project, please keep this header and credit
+# Autouse AI (https://github.com/auto-use/Auto-Use) in forks and derivative works.
+# A small attribution goes a long way toward a healthy open-source
+# community — thank you for contributing.
 
 from .service import OpenRouterProvider
 from .view import MODEL_MAPPINGS, get_model_info

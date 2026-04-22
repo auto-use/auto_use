@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2026 Ashish Yadav (Autouse AI)
+# Copyright 2026 Autouse AI — https://github.com/auto-use/Auto-Use
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# If you build on this project, please keep this header and credit
+# Autouse AI (https://github.com/auto-use/Auto-Use) in forks and derivative works.
+# A small attribution goes a long way toward a healthy open-source
+# community — thank you for contributing.
 """Add the Apache 2.0 header to every .py file that is missing it."""
 
 from __future__ import annotations
@@ -21,11 +26,12 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-_COPYRIGHT_OWNER = "Ashish Yadav (Autouse AI)"
+_COPYRIGHT_OWNER = "Autouse AI"
+_COPYRIGHT_URL = "https://github.com/auto-use/Auto-Use"
 _COPYRIGHT_YEAR = "2026"
 
 HEADER_LINES = [
-    f"# Copyright {_COPYRIGHT_YEAR} {_COPYRIGHT_OWNER}",
+    f"# Copyright {_COPYRIGHT_YEAR} {_COPYRIGHT_OWNER} — {_COPYRIGHT_URL}",
     "#",
     '# Licensed under the Apache License, Version 2.0 (the "License");',
     "# you may not use this file except in compliance with the License.",
@@ -38,6 +44,11 @@ HEADER_LINES = [
     "# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.",
     "# See the License for the specific language governing permissions and",
     "# limitations under the License.",
+    "#",
+    f"# If you build on this project, please keep this header and credit",
+    f"# {_COPYRIGHT_OWNER} ({_COPYRIGHT_URL}) in forks and derivative works.",
+    "# A small attribution goes a long way toward a healthy open-source",
+    "# community — thank you for contributing.",
 ]
 
 HEADER_TEXT = "\n".join(HEADER_LINES)

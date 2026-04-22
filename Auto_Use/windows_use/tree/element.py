@@ -1,4 +1,4 @@
-# Copyright 2026 Ashish Yadav (Autouse AI)
+# Copyright 2026 Autouse AI — https://github.com/auto-use/Auto-Use
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,6 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# If you build on this project, please keep this header and credit
+# Autouse AI (https://github.com/auto-use/Auto-Use) in forks and derivative works.
+# A small attribution goes a long way toward a healthy open-source
+# community — thank you for contributing.
 
 import warnings
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pywinauto")
@@ -38,7 +43,7 @@ from ctypes import wintypes
 # Toggle switch for screenshot capture
 SCREENSHOT = True   # Set to False to only generate ui_elements.txt without screenshot
 DEBUG = False             # Set to True to save files to debug folders, False for direct LLM only
-FRONTEND = True    # Set to True when running from windows_app.py to send annotated images to frontend
+FRONTEND = True    # Set to True when running from app.py to send annotated images to frontend
 
 # Define Rect namedtuple once for reuse throughout module
 Rect = namedtuple('Rect', ['left', 'top', 'right', 'bottom'])

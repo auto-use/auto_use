@@ -4,9 +4,11 @@ setlocal enabledelayedexpansion
 :: ============================================
 ::  Auto Use - Windows Dev Setup
 :: ============================================
-::  Creates venv, installs pip deps, patches platform-shared files
-::  (main.py, frontend/index.html, frontend/script.js) to the Windows
-::  variant, installs the Interception kernel driver, and reboots.
+::  Creates venv, installs pip deps, installs the Interception kernel
+::  driver, and reboots. Platform-shared files (main.py, cli.py,
+::  frontend/index.html, frontend/script.js) detect the OS at runtime,
+::  so no file patching is needed — one checkout runs on both macOS
+::  and Windows as-is.
 
 :: --- 1. Admin self-elevation ---
 net session >nul 2>&1
@@ -27,7 +29,7 @@ echo.
 
 :: --- 3. Sanity-check repo layout ---
 :: Required: main.py, windows_requirements.txt, Interception installer.
-:: Optional (proprietary): frontend\*, Auto_Use\windows_use - skipped if absent.
+:: Optional (proprietary): Auto_Use\windows_use - skipped if absent.
 set "MISSING="
 if not exist "main.py" set "MISSING=main.py"
 if not exist "windows_requirements.txt" set "MISSING=windows_requirements.txt"
@@ -46,8 +48,6 @@ if defined MISSING (
 )
 
 :: Optional proprietary pieces - informational only, not fatal.
-if not exist "frontend\index.html"      echo [i] frontend\index.html not found - will skip.
-if not exist "frontend\script.js"       echo [i] frontend\script.js not found  - will skip.
 if not exist "Auto_Use\windows_use"     echo [i] Auto_Use\windows_use not found - proprietary module absent.
 
 :: --- 4. Python check ---
@@ -197,51 +197,7 @@ if %errorlevel% neq 0 (
 )
 echo [OK] Requirements installed
 
-:: --- 7. Patch shared files to Windows variant (idempotent) ---
-:: Each file is optional (proprietary). Missing files are skipped, not errors.
-echo.
-echo [*] Patching platform-shared files for Windows...
-
-:: main.py: replace any 'from Auto_Use.<platform>.agent.service' with the windows variant
-if exist "main.py" (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='main.py'; (Get-Content $p -Raw) -replace 'from Auto_Use\.\w+\.agent\.service import AgentService', 'from Auto_Use.windows_use.agent.service import AgentService' | Set-Content $p -NoNewline"
-    if !errorlevel! neq 0 (
-        echo [ERROR] Failed to patch main.py
-        pause
-        exit /b 1
-    )
-    echo   [OK] main.py patched
-) else (
-    echo   [SKIP] main.py not present ^(proprietary^) - skipped
-)
-
-:: frontend/index.html: iframe src -> windows_animation.html
-if exist "frontend\index.html" (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='frontend\index.html'; (Get-Content $p -Raw) -replace 'mac_animation\.html', 'windows_animation.html' | Set-Content $p -NoNewline"
-    if !errorlevel! neq 0 (
-        echo [ERROR] Failed to patch frontend\index.html
-        pause
-        exit /b 1
-    )
-    echo   [OK] frontend\index.html patched
-) else (
-    echo   [SKIP] frontend\index.html not present ^(proprietary^) - skipped
-)
-
-:: frontend/script.js: comment reference -> windows_animation.html
-if exist "frontend\script.js" (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='frontend\script.js'; (Get-Content $p -Raw) -replace 'mac_animation\.html', 'windows_animation.html' | Set-Content $p -NoNewline"
-    if !errorlevel! neq 0 (
-        echo [ERROR] Failed to patch frontend\script.js
-        pause
-        exit /b 1
-    )
-    echo   [OK] frontend\script.js patched
-) else (
-    echo   [SKIP] frontend\script.js not present ^(proprietary^) - skipped
-)
-
-:: --- 8. Install Interception driver ---
+:: --- 7. Install Interception driver ---
 echo.
 echo ============================================
 echo   Installing Interception Driver
@@ -261,13 +217,13 @@ if %INSTALL_RC% equ 0 (
     echo     The driver may not be fully registered. Reboot and check anyway.
 )
 
-:: --- 9. Verification (informational) ---
+:: --- 8. Verification (informational) ---
 echo.
 echo [*] Verifying driver registration...
 powershell -NoProfile -Command "$val = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4D36E96B-E325-11CE-BFC1-08002BE10312}' -Name UpperFilters -ErrorAction SilentlyContinue).UpperFilters; if ($val -match 'interception') { Write-Host '  [OK] Keyboard filter registered' } else { Write-Host '  [--] Keyboard filter NOT registered yet' }"
 powershell -NoProfile -Command "$val = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4D36E96F-E325-11CE-BFC1-08002BE10312}' -Name UpperFilters -ErrorAction SilentlyContinue).UpperFilters; if ($val -match 'interception') { Write-Host '  [OK] Mouse filter registered' } else { Write-Host '  [--] Mouse filter NOT registered yet' }"
 
-:: --- 10. Reboot ---
+:: --- 9. Reboot ---
 echo.
 echo ============================================
 echo   Setup complete

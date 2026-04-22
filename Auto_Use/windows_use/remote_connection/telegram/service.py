@@ -1,4 +1,4 @@
-# Copyright 2026 Ashish Yadav (Autouse AI)
+# Copyright 2026 Autouse AI — https://github.com/auto-use/Auto-Use
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,6 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# If you build on this project, please keep this header and credit
+# Autouse AI (https://github.com/auto-use/Auto-Use) in forks and derivative works.
+# A small attribution goes a long way toward a healthy open-source
+# community — thank you for contributing.
 
 import asyncio
 import threading
@@ -305,7 +310,7 @@ class TelegramAgentBot:
     # ── public entry point ───────────────────────────────────────────────
 
     def run(self):
-        """Start polling (blocking). Called from a thread by windows_app.py."""
+        """Start polling (blocking). Called from a thread by app.py."""
         app = Application.builder().token(self._token).build()
         app.add_handler(CommandHandler("start", self.start_handler))
         app.add_handler(CommandHandler("stop", self.stop_handler))
