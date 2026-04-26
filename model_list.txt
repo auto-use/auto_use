@@ -75,4 +75,5 @@ gemini-3.1-pro
 gemini-3-flash
 claude-sonnet-4.6
 claude-opus-4.6
+claude-opus-4.7
 sonar

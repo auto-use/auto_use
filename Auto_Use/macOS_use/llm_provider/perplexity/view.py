@@ -49,6 +49,13 @@ MODEL_MAPPINGS = {
         "reasoning_support": True,
         "reasoning_effort": "medium"
     },
+    "claude-opus-4.7": {
+        "api_name": "anthropic/claude-opus-4-7",
+        "vision": True,
+        "display_name": "Claude Opus 4.7",
+        "reasoning_support": True,
+        "reasoning_effort": "medium"
+    },
     "claude-opus-4.6": {
         "api_name": "anthropic/claude-opus-4-6",
         "vision": True,
