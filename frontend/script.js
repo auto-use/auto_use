@@ -1389,14 +1389,209 @@ document.addEventListener('DOMContentLoaded', () => {
     // Shell end: terminal card fades out, screenshot slides back up
     window.shellEnd = () => {
         if (!shellTerminalContainer || !imageStreamContainer) return;
-        
+
         shellTerminalContainer.classList.remove('visible');
         imageStreamContainer.classList.remove('shell-active');
-        
+
         // Reset color after fade out completes
         setTimeout(() => {
             if (shellStatusText) shellStatusText.style.color = '';
             resetShellTerminal();
         }, 700);
+    };
+
+    // =====================================================================
+    // CLI streaming UI — pills for parallel CLI subprocesses during cli_await.
+    // Emitted by app.py:send_cli_event_to_frontend (macOS only for now).
+    // =====================================================================
+
+    const cliStreamList = document.getElementById('cliStreamList');
+    const cliPillTemplate = document.getElementById('cliPillTemplate');
+
+    function findCliPill(taskId) {
+        if (!cliStreamList) return null;
+        return cliStreamList.querySelector(
+            `.cli-pill[data-task-id="${CSS.escape(String(taskId))}"]`
+        );
+    }
+
+    window.cliTaskStart = (taskId, description) => {
+        console.log('[cli] task_start', taskId, description);
+        if (!cliStreamList || !cliPillTemplate) {
+            console.warn('[cli] missing cliStreamList or cliPillTemplate');
+            return;
+        }
+        if (findCliPill(taskId)) return;  // dedupe if event arrives twice
+        const pill = cliPillTemplate.content.firstElementChild.cloneNode(true);
+        pill.dataset.taskId = String(taskId);
+        const cmdEl = pill.querySelector('.cli-pill-cmd');
+        if (cmdEl) cmdEl.textContent = description || '';
+        cliStreamList.appendChild(pill);
+    };
+
+    // Per-word fade-in stagger. Higher = calmer reading pace.
+    const CLI_WORD_STAGGER_MS  = 80;
+    // Hold a finished page (full pill width filled) before clearing for the next page.
+    const CLI_PAGE_HOLD_MS     = 750;
+    // Hold between distinct lines (after the final page of a line completes).
+    const CLI_LINE_HOLD_MS     = 380;
+
+    // Per-pill line queue + runner. Incoming task_line events get queued and
+    // played back one at a time so the user always sees each line stream
+    // smoothly, even when the agent dumps 10 lines of raw response in one
+    // millisecond. We're explicitly OK with the UI lagging behind real time —
+    // smoothness matters more than catching up.
+    //
+    // Each line is "paginated": words stream left-to-right; when the next
+    // word would overflow the pill width, the current page holds, the
+    // output clears, and that word starts the next page from the left.
+    const _cliPillRunners = new WeakMap();
+
+    function _getRunner(pill) {
+        let runner = _cliPillRunners.get(pill);
+        if (!runner) {
+            runner = { queue: [], running: false };
+            _cliPillRunners.set(pill, runner);
+        }
+        return runner;
+    }
+
+    function _pumpCliRunner(pill, runner) {
+        if (runner.running) return;
+        if (runner.queue.length === 0) return;
+        runner.running = true;
+        const { text, stream } = runner.queue.shift();
+
+        const out = pill.querySelector('.cli-output');
+        if (!out) {
+            runner.running = false;
+            _pumpCliRunner(pill, runner);
+            return;
+        }
+
+        const words = String(text).split(/\s+/).filter(w => w.length > 0);
+        const lineClass = stream === 'err' ? 'cli-line cli-line-err' : 'cli-line cli-line-out';
+
+        if (words.length === 0) {
+            runner.running = false;
+            _pumpCliRunner(pill, runner);
+            return;
+        }
+
+        let pageDiv = null;
+        const startNewPage = () => {
+            pageDiv = document.createElement('div');
+            pageDiv.className = lineClass;
+            out.replaceChildren(pageDiv);
+        };
+        startNewPage();
+
+        let i = 0;
+        const tick = () => {
+            if (i >= words.length) {
+                // Final page rendered — hold, then drop the run flag so the
+                // next queued line gets pulled.
+                setTimeout(() => {
+                    runner.running = false;
+                    _pumpCliRunner(pill, runner);
+                }, CLI_LINE_HOLD_MS);
+                return;
+            }
+
+            const isFirstOnPage = pageDiv.childElementCount === 0;
+            const span = document.createElement('span');
+            span.className = 'cli-word';
+            span.textContent = (isFirstOnPage ? '' : ' ') + words[i];
+            pageDiv.appendChild(span);
+
+            // Did this word push past the pill's right edge? Measure on the
+            // page div itself — `.cli-line` has overflow:hidden so the
+            // overflow doesn't propagate up to `.cli-output`. If the word
+            // doesn't fit (and it isn't the only word on this page), retract
+            // it, hold the current page, then start fresh with this word at
+            // the left edge of a new page.
+            const overflowed = pageDiv.scrollWidth > pageDiv.clientWidth + 1;
+            if (overflowed && !isFirstOnPage) {
+                pageDiv.removeChild(span);
+                setTimeout(() => {
+                    startNewPage();
+                    tick();  // retry placing this word as the start of the new page
+                }, CLI_PAGE_HOLD_MS);
+                return;
+            }
+
+            // Word fits (or it's a lone oversized word we accept as-is).
+            i++;
+            setTimeout(tick, CLI_WORD_STAGGER_MS);
+        };
+
+        tick();
+    }
+
+    window.cliTaskLine = (taskId, line, stream) => {
+        console.log('[cli] task_line', taskId, stream, line);
+        const pill = findCliPill(taskId);
+        if (!pill) {
+            console.warn('[cli] no pill found for', taskId);
+            return;
+        }
+        const text = line == null ? '' : String(line);
+        if (text.trim() === '') return;  // skip blanks so the pill never flashes empty
+        const runner = _getRunner(pill);
+        runner.queue.push({ text, stream });
+        _pumpCliRunner(pill, runner);
+    };
+
+    window.cliTaskEnd = (taskId, status, summary) => {
+        const pill = findCliPill(taskId);
+        if (!pill) return;
+        pill.dataset.status = status || 'complete';
+        pill.classList.add('complete');
+        if (summary) {
+            // Route the summary through the same paginated queue as regular
+            // lines so it streams in with the same calm pacing.
+            const runner = _getRunner(pill);
+            runner.queue.push({ text: summary, stream: 'summary' });
+            _pumpCliRunner(pill, runner);
+        }
+    };
+
+    const chatWrapper = document.getElementById('chatWrapper');
+    // llmWrapper is already declared higher up (line ~23) — reuse that.
+
+    // Whether split-layout was on the chat/llm wrappers when cli-await began,
+    // so cliAwaitEnd can restore them to that state cleanly.
+    let _cliPrevSplit = false;
+
+    window.cliAwaitStart = (reason) => {
+        console.log('[cli] await_start', reason);
+        // Slide out the screenshot panel.
+        if (imageStreamContainer) imageStreamContainer.classList.remove('agent-visible');
+        // Drop split-layout so the chat box snaps back to its initial big
+        // centered state (the base .chat-container-wrapper rule wins). This
+        // is what the user wants: full-width chat box during cli_await.
+        if (chatWrapper) {
+            _cliPrevSplit = chatWrapper.classList.contains('split-layout');
+            chatWrapper.classList.remove('split-layout');
+            chatWrapper.classList.add('cli-mode');
+        }
+        if (llmWrapper) llmWrapper.classList.remove('split-layout');
+        document.body.classList.add('cli-mode');  // hides LLM dropdown + settings cog
+    };
+
+    window.cliAwaitEnd = () => {
+        console.log('[cli] await_end');
+        if (chatWrapper) {
+            chatWrapper.classList.remove('cli-mode');
+            if (_cliPrevSplit) chatWrapper.classList.add('split-layout');
+        }
+        if (llmWrapper && _cliPrevSplit) llmWrapper.classList.add('split-layout');
+        document.body.classList.remove('cli-mode');
+        // Restore the screenshot panel.
+        if (imageStreamContainer) imageStreamContainer.classList.add('agent-visible');
+        // Clear pills after the fade-out finishes (matches the 0.4s transition).
+        setTimeout(() => {
+            if (cliStreamList) cliStreamList.innerHTML = '';
+        }, 450);
     };
 });

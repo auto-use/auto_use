@@ -103,18 +103,12 @@ Examples:
         default=None,
         help="Runtime API key for LLM provider (optional, falls back to .env)"
     )
-    parser.add_argument(
-        "--position",
-        type=int,
-        default=0,
-        help="Window corner position index (0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right, cycles)"
-    )
-    
+
     args = parser.parse_args()
-    
+
     # Import here to avoid circular imports at module load
     from .service import AgentService
-    
+
     # Callback to write result when CLI agent exits
     def on_complete(result: dict):
         if args.result:
@@ -126,8 +120,10 @@ Examples:
                 print(f"Result written to: {args.result}")
             except (ValueError, OSError):
                 pass  # stdout closed in compiled mode
-    
-    # Create and run CLI agent
+
+    # Create and run CLI agent. Output streams to stdout for the parent
+    # main agent's pill UI; the agent loop runs synchronously on this
+    # subprocess's main thread.
     agent = AgentService(
         provider=args.provider,
         model=args.model,
@@ -136,10 +132,7 @@ Examples:
         api_key=args.api_key,
         task=args.task,
         on_complete=on_complete if args.result else None,
-        position=args.position
     )
-    
-    # Run the agent (this will show the pywebview UI)
     agent.process_request(args.task)
 
 

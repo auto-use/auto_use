@@ -46,9 +46,9 @@ logger = logging.getLogger(__name__)
 
 
 class ControllerView:
-    def __init__(self, provider: str = None, model: str = None, cli_mode: bool = False, session_id: str = None, web_callback=None, shell_callback=None, api_key: str = None, stop_event=None):
+    def __init__(self, provider: str = None, model: str = None, cli_mode: bool = False, session_id: str = None, web_callback=None, shell_callback=None, cli_callback=None, api_key: str = None, stop_event=None):
         """Initialize the Controller View - central router for all actions
-        
+
         Args:
             provider: LLM provider name for web search
             model: LLM model name for web search
@@ -56,6 +56,7 @@ class ControllerView:
             session_id: Optional unique session ID for isolated folders (cli_mode only)
             web_callback: Optional callback for web search status (start/end)
             shell_callback: Optional callback for shell execution status (start/result/end)
+            cli_callback: Optional callback for CLI agent streaming (await_start/task_start/task_line/task_end/await_end)
             api_key: Optional runtime API key for LLM providers (passed to CLI agent)
             stop_event: Optional threading.Event for stopping actions mid-execution
         """
@@ -75,13 +76,14 @@ class ControllerView:
         self.model = model
         self.web_callback = web_callback
         self.shell_callback = shell_callback
+        self.cli_callback = cli_callback
         self._stop_loading = False
-        
+
         # CLI Agent tracking - multi-task support
         self._cli_tasks = []          # Active: [{"task": str, "subprocess": Popen, "result_file": Path}]
         self._cli_completed = []      # Done: [{"task": str, "summary": str, "status": str}]
         self._cli_agent_lock = threading.Lock()
-        self._cli_spawn_count = 0     # Total CLI agents spawned (for corner cycling)
+        self._cli_await_active = False  # Whether an await_start has been emitted but not yet matched by await_end
     
     def _web_loading_animation(self):
         """Display animated loading indicator for web search"""
@@ -93,8 +95,53 @@ class ControllerView:
             idx += 1
             time.sleep(0.5)
     
+    def _safe_cli_emit(self, event_type: str, *args):
+        """Invoke self.cli_callback safely; never let a callback exception bubble up."""
+        if not self.cli_callback:
+            return
+        try:
+            self.cli_callback(event_type, *args)
+        except Exception as e:
+            logger.error(f"cli_callback({event_type}) failed: {e}")
+
+    def _read_cli_stream(self, pipe, task_id: str, stream: str):
+        """Reader thread: forwards each line from a subprocess pipe to the frontend.
+
+        Loops until the pipe closes (subprocess exit). Each line emits a 'task_line'
+        event tagged with task_id and stream ("out" or "err").
+        """
+        if pipe is None:
+            logger.warning(f"_read_cli_stream({task_id}, {stream}): pipe is None")
+            return
+        logger.info(f"_read_cli_stream alive ({task_id}, {stream})")
+        line_count = 0
+        try:
+            for raw in iter(pipe.readline, b""):
+                if not raw:
+                    break
+                try:
+                    line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                except Exception:
+                    line = str(raw)
+                if line == "" and stream == "err":
+                    # don't spam empty stderr lines
+                    continue
+                line_count += 1
+                if line_count <= 3 or line_count % 50 == 0:
+                    logger.info(f"_read_cli_stream({task_id}, {stream}) line #{line_count}: {line[:120]}")
+                self._safe_cli_emit("task_line", task_id, line, stream)
+        except Exception as e:
+            logger.error(f"_read_cli_stream({task_id}, {stream}) error: {e}")
+        finally:
+            logger.info(f"_read_cli_stream done ({task_id}, {stream}, total={line_count} lines)")
+            try:
+                pipe.close()
+            except Exception:
+                pass
+
     def _cli_agent_complete_callback(self, result: dict, result_file: Path):
         """Callback when CLI agent finishes execution"""
+        task_id = result_file.stem
         with self._cli_agent_lock:
             # Move from active to completed
             self._cli_tasks = [t for t in self._cli_tasks if t["result_file"] != result_file]
@@ -104,7 +151,10 @@ class ControllerView:
                 "status": result.get("status", "complete")
             })
             logger.info(f"CLI Agent completed: {result.get('summary', 'No summary')}")
-        
+
+        # Notify frontend that this task ended (before milestone, so the pill flips first)
+        self._safe_cli_emit("task_end", task_id, result.get("status", "complete"), result.get("summary", ""))
+
         # Update milestone with completion status
         cli_task = result.get("task", "Unknown task")
         cli_summary = result.get("summary", "Completed")
@@ -126,6 +176,7 @@ class ControllerView:
     
     def stop_cli_agent(self):
         """Terminate all CLI agent subprocesses if running"""
+        terminated_ids = []
         with self._cli_agent_lock:
             for task_entry in self._cli_tasks:
                 proc = task_entry.get("subprocess")
@@ -135,8 +186,18 @@ class ControllerView:
                         logger.info(f"CLI Agent subprocess terminated: {task_entry.get('task', 'unknown')}")
                     except Exception as e:
                         logger.error(f"Error terminating CLI subprocess: {e}")
+                rf = task_entry.get("result_file")
+                if rf is not None:
+                    terminated_ids.append(rf.stem)
             self._cli_tasks.clear()
             self._cli_completed.clear()
+
+        # Notify frontend that any pills for these tasks are done (stopped)
+        for task_id in terminated_ids:
+            self._safe_cli_emit("task_end", task_id, "stopped", "Stopped by user")
+        if self._cli_await_active:
+            self._safe_cli_emit("await_end")
+            self._cli_await_active = False
         
     def route_action(self, action_data):
         """
@@ -353,7 +414,15 @@ class ControllerView:
                     # AWAIT MODE: freeze pipeline until all CLI tasks complete
                     reason = action_item.get("value", "")
                     logger.info(f"CLI Agent await triggered: {reason}")
-                    
+
+                    # Notify frontend only if there's actual work in flight,
+                    # so an empty cli_await doesn't flash the streaming UI.
+                    with self._cli_agent_lock:
+                        had_pending = len(self._cli_tasks) > 0
+                    if had_pending:
+                        self._cli_await_active = True
+                        self._safe_cli_emit("await_start", reason)
+
                     # Block until all pending CLI tasks finish
                     while True:
                         if self.stop_event and self.stop_event.is_set():
@@ -364,13 +433,17 @@ class ControllerView:
                             if len(self._cli_tasks) == 0:
                                 break
                         time.sleep(1)
-                    
+
                     # Collect all completed results
                     with self._cli_agent_lock:
                         completed = list(self._cli_completed)
-                    
+
                     logger.info(f"CLI Agent await complete: {len(completed)} tasks finished")
-                    
+
+                    if self._cli_await_active:
+                        self._safe_cli_emit("await_end")
+                        self._cli_await_active = False
+
                     result = {
                         "status": "success",
                         "action": "cli_await",
@@ -415,29 +488,48 @@ class ControllerView:
                     
                     if self.api_key:
                         cli_cmd.extend(["--api_key", self.api_key])
-                    
-                    cli_cmd.extend(["--position", str(self._cli_spawn_count % 4)])
-                    self._cli_spawn_count += 1
-                    
-                    # Start subprocess
+
+                    # Start subprocess. Force unbuffered stdout/stderr in the
+                    # child so our reader thread sees lines as they're printed
+                    # — without this, Python block-buffers when not connected
+                    # to a TTY and the streaming UI feels frozen.
+                    cli_env = os.environ.copy()
+                    cli_env["PYTHONUNBUFFERED"] = "1"
                     cli_proc = None
                     try:
                         cli_proc = subprocess.Popen(
-                            cli_cmd, 
+                            cli_cmd,
                             stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE
+                            stderr=subprocess.PIPE,
+                            env=cli_env
                         )
                         debug_log(f"CLI subprocess started (PID: {cli_proc.pid})")
                     except Exception as e:
                         debug_log(f"CLI subprocess failed to start: {e}", "ERROR")
-                    
+
                     # Track in active list
+                    task_id = result_file.stem
                     with self._cli_agent_lock:
                         self._cli_tasks.append({
                             "task": task_description,
                             "subprocess": cli_proc,
                             "result_file": result_file
                         })
+
+                    # Notify frontend a new task has started, then begin
+                    # streaming its stdout/stderr line-by-line.
+                    self._safe_cli_emit("task_start", task_id, task_description)
+                    if cli_proc is not None:
+                        for pipe, stream_name in (
+                            (cli_proc.stdout, "out"),
+                            (cli_proc.stderr, "err"),
+                        ):
+                            t = threading.Thread(
+                                target=self._read_cli_stream,
+                                args=(pipe, task_id, stream_name),
+                                daemon=True,
+                            )
+                            t.start()
                     
                     # Watcher thread (bind result_file via default arg to avoid closure issue)
                     def watch_cli_result(rf=result_file):

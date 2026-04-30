@@ -439,10 +439,9 @@ def index():
 def serve_static(filename):
     """Serve static files - from embedded resources in compiled mode, filesystem in dev mode"""
     if IS_COMPILED:
-        for prefix in ['frontend/', f'Auto_Use/{PLATFORM_PKG}/sandbox/terminal/']:
-            response = serve_embedded_file(prefix + filename)
-            if response:
-                return response
+        response = serve_embedded_file('frontend/' + filename)
+        if response:
+            return response
         response = serve_embedded_file(filename)
         if response:
             return response
@@ -451,18 +450,6 @@ def serve_static(filename):
     if app.static_folder:
         return send_from_directory(app.static_folder, filename)
     return "Not found", 404
-
-@app.route('/terminal/<path:filename>')
-def serve_terminal(filename):
-    """Serve CLI agent terminal files"""
-    if IS_COMPILED:
-        response = serve_embedded_file(f'Auto_Use/{PLATFORM_PKG}/sandbox/terminal/{filename}')
-        if response:
-            return response
-        return "Not found", 404
-
-    terminal_path = os.path.join(os.path.dirname(__file__), 'Auto_Use', PLATFORM_PKG, 'sandbox', 'terminal')
-    return send_from_directory(terminal_path, filename)
 
 @app.route('/logo.png')
 def serve_logo():
@@ -625,6 +612,60 @@ def send_web_status_to_frontend(status):
         except Exception:
             debug_exception("send_web_status_to_frontend")
 
+def _js_escape(text):
+    """Escape a string for safe interpolation into a single-quoted JS literal."""
+    if text is None:
+        return ""
+    return (
+        str(text)
+        .replace('\\', '\\\\')
+        .replace("'", "\\'")
+        .replace('\n', '\\n')
+        .replace('\r', '\\r')
+    )
+
+def send_cli_event_to_frontend(event_type, *args):
+    """Forward CLI agent streaming events to the frontend.
+
+    Event types:
+      - "await_start", reason            -> window.cliAwaitStart(reason)
+      - "await_end"                      -> window.cliAwaitEnd()
+      - "task_start", task_id, desc      -> window.cliTaskStart(task_id, desc)
+      - "task_line",  task_id, line, s   -> window.cliTaskLine(task_id, line, stream)
+      - "task_end",   task_id, status, summary -> window.cliTaskEnd(task_id, status, summary)
+    """
+    global webview_window
+    if not webview_window:
+        return
+    try:
+        if event_type == "await_start":
+            reason = _js_escape(args[0] if args else "")
+            webview_window.evaluate_js(f"window.cliAwaitStart && window.cliAwaitStart('{reason}')")
+        elif event_type == "await_end":
+            webview_window.evaluate_js("window.cliAwaitEnd && window.cliAwaitEnd()")
+        elif event_type == "task_start":
+            task_id = _js_escape(args[0])
+            desc = _js_escape(args[1] if len(args) > 1 else "")
+            webview_window.evaluate_js(
+                f"window.cliTaskStart && window.cliTaskStart('{task_id}', '{desc}')"
+            )
+        elif event_type == "task_line":
+            task_id = _js_escape(args[0])
+            line = _js_escape(args[1] if len(args) > 1 else "")
+            stream = _js_escape(args[2] if len(args) > 2 else "out")
+            webview_window.evaluate_js(
+                f"window.cliTaskLine && window.cliTaskLine('{task_id}', '{line}', '{stream}')"
+            )
+        elif event_type == "task_end":
+            task_id = _js_escape(args[0])
+            status = _js_escape(args[1] if len(args) > 1 else "complete")
+            summary = _js_escape(args[2] if len(args) > 2 else "")
+            webview_window.evaluate_js(
+                f"window.cliTaskEnd && window.cliTaskEnd('{task_id}', '{status}', '{summary}')"
+            )
+    except Exception:
+        debug_exception(f"send_cli_event_to_frontend({event_type})")
+
 def send_shell_status_to_frontend(event, data=None, label=None):
     """Send shell / AppleScript execution status to frontend for terminal animation.
     `label` lets callers tag the terminal card ("Shell", "AppleScript", ...);
@@ -720,8 +761,9 @@ def start_agent():
                     text_callback=send_text_to_frontend,
                     web_callback=send_web_status_to_frontend,
                     shell_callback=send_shell_status_to_frontend,
+                    cli_callback=send_cli_event_to_frontend,
                     api_key=api_key,
-                    stop_event=stop_event
+                    stop_event=stop_event,
                 )
 
                 monitor_thread = threading.Thread(target=monitor_milestones)

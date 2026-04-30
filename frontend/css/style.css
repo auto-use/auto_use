@@ -2010,3 +2010,291 @@ body {
     z-index: -1;
     pointer-events: none;
 }
+
+/* =====================================================================
+   CLI Streaming Area — lives INSIDE the chat-container-content.
+   While idle it's hidden; while .chat-container-wrapper is in .cli-mode
+   it takes over the spot of .output-stream-area and the chat box itself
+   expands across the full viewport width.
+   ===================================================================== */
+
+.cli-stream-area {
+    position: relative;
+    flex: 1;
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: clamp(12px, 1.5vw, 16px);
+    margin-top: clamp(40px, 4vw, 50px);
+    /* iteration 3: the chat box no longer expands, so this padding has to be
+       lean — enough for visual breathing room, not enough to crowd the pills. */
+    padding: clamp(12px, 1.4vw, 18px) clamp(8px, 1vw, 14px);
+    border-radius: clamp(16px, 2vw, 20px);
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    display: none;          /* visible only when .chat-container-wrapper has .cli-mode */
+    flex-direction: column;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.chat-container-wrapper.cli-mode .cli-stream-area {
+    display: flex;
+    opacity: 1;
+}
+
+/* When CLI mode is on, the existing milestone/welcome panel and the
+   "Agent activated:" strip step aside so the pills own the chat box. */
+.chat-container-wrapper.cli-mode .output-stream-area,
+.chat-container-wrapper.cli-mode .agent-response-strip {
+    display: none;
+}
+
+/* (Iteration 3) The chat-container-wrapper KEEPS its split-layout size
+   during cli-mode. Only its inner content swaps. No left/right/width
+   overrides here. */
+
+/* Hide LLM dropdown chip + settings cog while pills own the screen. */
+body.cli-mode .glass-button-wrapper,
+body.cli-mode .settings-btn {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+}
+
+.cli-stream-list {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(8px, 1vw, 12px);
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    overflow-y: auto;
+    overflow-x: hidden;
+    /* hide the native scrollbar — content auto-scrolls to bottom */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.cli-stream-list::-webkit-scrollbar { display: none; }
+
+.cli-stream-list::-webkit-scrollbar {
+    width: 6px;
+}
+.cli-stream-list::-webkit-scrollbar-thumb {
+    background: rgba(120, 120, 120, 0.25);
+    border-radius: 3px;
+}
+
+/* ---------- individual CLI pill ---------- */
+
+.cli-pill {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    min-height: clamp(38px, 4vw, 52px);
+    padding: clamp(7px, 0.8vw, 11px) clamp(12px, 1.4vw, 18px) clamp(7px, 0.8vw, 11px) clamp(10px, 1.2vw, 14px);
+    border-radius: clamp(20px, 2.6vw, 30px);
+    overflow: hidden;
+    animation: cli-pill-in 0.35s cubic-bezier(0.25, 0.8, 0.25, 1) both;
+    transition: max-height 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+@keyframes cli-pill-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.cli-pill > .liquidGlass-content {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 1vw, 12px);
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* loader column on the left of the pill (spinner + breathing dot).
+   Integer pixel dimensions + flex-centered SVG to keep the rotating
+   spokes pinned exactly at the visual center — sub-pixel raster shifts
+   were making the spinner appear to drift up/down at 1.6rem (25.6px). */
+.cli-pill-loader {
+    position: relative;
+    flex: 0 0 auto;
+    width: 26px;
+    height: 26px;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cli-pill-icon {
+    display: block;
+    height: 26px;
+    width: 26px;
+    stroke: rgba(107, 114, 128, 1);
+    animation: cli-pill-spin 1s linear infinite;
+    will-change: transform;
+    transform-origin: 50% 50%;
+    transform-box: fill-box;
+    backface-visibility: hidden;
+    shape-rendering: geometricPrecision;
+}
+
+@keyframes cli-pill-spin {
+    to { transform: rotate(360deg); }
+}
+
+.cli-pill-dot {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #d880be 0%, #8782eb 55%, #6ec5e9 100%);
+    box-shadow: 0 0 3px rgba(216, 128, 190, 0.8),
+                0 0 6px rgba(168, 110, 235, 0.55);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.cli-pill-dot::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 50%;
+    background: radial-gradient(
+        circle,
+        rgba(216, 128, 190, 0.65) 0%,
+        rgba(168, 110, 235, 0.40) 45%,
+        transparent 80%
+    );
+    transform: translate(-50%, -50%) scale(0.6);
+    will-change: transform, opacity;
+    animation: cli-dot-breathe 2.2s ease-in-out infinite;
+    pointer-events: none;
+    z-index: -1;
+}
+
+@keyframes cli-dot-breathe {
+    0%, 100% { transform: translate(-50%, -50%) scale(0.6); opacity: 0.5; }
+    50%      { transform: translate(-50%, -50%) scale(1);   opacity: 1;   }
+}
+
+/* status glyph — hidden until pill goes complete */
+.cli-pill-status {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    line-height: 1;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+}
+
+/* body column on the right (streaming output). flex:1 1 0 means "take up
+   exactly the remaining space, no more, no less" — combined with min-width:0
+   this guarantees the body never pushes the pill wider than its parent. */
+.cli-pill-body {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    overflow: hidden;
+}
+
+/* Task description from the main agent — hidden so the pill shows ONLY
+   the live CLI agent output, not the dispatch instruction. */
+.cli-pill-cmd {
+    display: none;
+}
+
+/* Single-line strip that always shows ONLY the latest streamed line.
+   When a new line arrives, JS swaps the inner div; its words fade in
+   left-to-right via the .cli-word animation. */
+.cli-output {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: clamp(11px, 0.85vw, 12.5px);
+    color: rgba(90, 90, 95, 0.9);
+    line-height: 1.4;
+    width: 100%;
+    height: 1.4em;
+    overflow: hidden;
+}
+.cli-output:empty::before {
+    content: 'Waiting for output…';
+    color: rgba(140, 140, 145, 0.65);
+    font-style: italic;
+}
+
+.cli-line {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cli-line-err {
+    color: rgba(200, 70, 90, 0.95);
+}
+.cli-line-summary {
+    color: rgba(70, 70, 75, 0.9);
+    font-style: italic;
+}
+
+/* word-by-word reveal — each <span class="cli-word"> staggers its fade in. */
+.cli-word {
+    opacity: 0;
+    animation: cli-word-in 0.22s ease-out forwards;
+}
+@keyframes cli-word-in {
+    to { opacity: 1; }
+}
+
+/* ---------- complete state ---------- */
+
+.cli-pill.complete .cli-pill-icon {
+    opacity: 0;
+    animation-play-state: paused;
+}
+
+.cli-pill.complete .cli-pill-dot,
+.cli-pill.complete .cli-pill-dot::before {
+    opacity: 0;
+    animation-play-state: paused;
+}
+
+.cli-pill.complete .cli-pill-status {
+    opacity: 1;
+}
+
+.cli-pill[data-status="complete"] .cli-pill-status::before {
+    content: '✓';
+    color: rgba(64, 160, 110, 0.95);
+}
+
+.cli-pill[data-status="error"] .cli-pill-status::before,
+.cli-pill[data-status="stopped"] .cli-pill-status::before {
+    content: '✕';
+    color: rgba(200, 70, 90, 0.95);
+}
+
+.cli-pill.complete .cli-output {
+    max-height: 1.6em;
+}

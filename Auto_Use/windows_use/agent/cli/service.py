@@ -30,10 +30,6 @@ from datetime import datetime
 from typing import Optional
 import threading
 
-import webview
-import win32gui
-import win32con
-
 from ...llm_provider.llm_manager import LLMManager
 from ...controller.view import ControllerView
 from .view import CLIAgentResponseFormatter
@@ -58,16 +54,16 @@ if sys.stderr is None or (hasattr(sys.stderr, 'closed') and sys.stderr.closed):
 
 # Safe print function that won't crash on closed stdout
 def safe_print(*args, **kwargs):
-    """Print that won't crash if stdout is unavailable"""
+    """Print that won't crash if stdout is unavailable.
+    Always forces flush so the parent process's pipe reader sees output
+    immediately (the streaming pill UI relies on prompt line delivery)."""
+    kwargs.setdefault("flush", True)
     try:
         print(*args, **kwargs)
     except (ValueError, OSError, AttributeError):
         # I/O operation on closed file or similar - just log instead
         msg = ' '.join(str(a) for a in args)
         debug_log(f"[PRINT] {msg}")
-
-# Actions that execute PowerShell commands (show in terminal UI)
-TERMINAL_ACTIONS = {"shell", "replace", "write", "view"}
 
 # Maximum iterations before CLI agent auto-exits (prevents infinite loops)
 MAX_CLI_ITERATIONS = 50
@@ -78,37 +74,30 @@ class AgentService:
     
     def __init__(self, provider: str, model: str, save_conversation: bool = False,
                  thinking: bool = True, api_key: str = None, stop_event=None,
-                 task: str = None, on_complete: callable = None, position: int = 0):
-        
+                 task: str = None, on_complete: callable = None):
+
         self.provider = provider
         self.model = model
         self.save_conversation = save_conversation
         self.stop_event = stop_event
         self.task = task  # Task description (for tracking when called as service)
         self.on_complete = on_complete  # Callback when CLI agent exits
-        self.position = position % 4  # Corner index: 0=TL, 1=TR, 2=BL, 3=BR
-        
+
         # Generate unique session ID for complete isolation
         self.session_id = uuid.uuid4().hex[:8]
-        
+
         # Initialize LLM Manager
         self.llm = LLMManager(
-            provider=provider, 
-            model=model, 
+            provider=provider,
+            model=model,
             thinking=thinking,
             api_key=api_key,
             cli_agent=True
         )
-        
+
         # Initialize Controller with cli_mode and session_id for complete isolation
         self.controller = ControllerView(provider=provider, model=model, cli_mode=True, session_id=self.session_id, api_key=api_key)
-        
-        # Stream buffer for terminal UI
-        self._stream_buffer = []
-        self._stream_lock = threading.Lock()
-        self._webview_window = None
-        self._ui_started = False
-        
+
         # Load system prompt
         self.system_prompt = self._load_system_prompt()
         
@@ -168,173 +157,6 @@ class AgentService:
             except Exception as e:
                 safe_print(f"⚠ Error saving raw response: {str(e)}")
     
-    def _push_stream(self, msg_type: str, content):
-        """Push message to stream buffer for terminal UI
-        
-        Args:
-            msg_type: 'thinking', 'current_goal', 'memory', 'shell_command', 'error', 'exit'
-            content: Message content (str or dict for shell_command)
-        """
-        with self._stream_lock:
-            self._stream_buffer.append({
-                "type": msg_type,
-                "content": content
-            })
-    
-    def _stream_terminal_action(self, action_result: dict):
-        """Stream terminal action results as PowerShell commands
-        
-        Args:
-            action_result: Result from controller.route_action()
-        """
-        action_type = action_result.get("action")
-        
-        # Handle single terminal action
-        if action_type in TERMINAL_ACTIONS:
-            cwd = action_result.get("cwd", self.controller.cli_service.sandbox.get_cwd())
-            command = action_result.get("command", "")
-            output = action_result.get("output", "")
-            status = action_result.get("status", "success")
-            
-            self._push_stream("shell_command", {
-                "cwd": cwd,
-                "command": command,
-                "output": output,
-                "status": status
-            })
-        
-        # Handle multiple actions
-        elif action_type == "multiple":
-            results = action_result.get("results", [])
-            for result in results:
-                if result.get("action") in TERMINAL_ACTIONS:
-                    cwd = result.get("cwd", self.controller.cli_service.sandbox.get_cwd())
-                    command = result.get("command", "")
-                    output = result.get("output", "")
-                    status = result.get("status", "success")
-                    
-                    self._push_stream("shell_command", {
-                        "cwd": cwd,
-                        "command": command,
-                        "output": output,
-                        "status": status
-                    })
-    
-    def get_stream_messages(self):
-        """Get and clear stream buffer (called by JS via pywebview API)"""
-        with self._stream_lock:
-            messages = self._stream_buffer.copy()
-            self._stream_buffer.clear()
-            return messages
-    
-    def _send_window_to_back(self):
-        """Send the pywebview terminal window to back of z-order"""
-        try:
-            # Small delay to ensure window is fully created
-            time.sleep(0.3)
-            
-            # Find window by title
-            hwnd = win32gui.FindWindow(None, 'Auto_use_CLI')
-            if hwnd:
-                # Send to bottom of z-order without changing size/position
-                win32gui.SetWindowPos(
-                    hwnd,
-                    win32con.HWND_BOTTOM,
-                    0, 0, 0, 0,
-                    win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE
-                )
-        except Exception as e:
-            safe_print(f"Could not send window to back: {e}")
-    
-    @staticmethod
-    def _get_terminal_position(corner: int = 0, win_width: int = 550, win_height: int = 600):
-        """Calculate dynamic window position based on screen geometry, DPI scaling, and corner index.
-        
-        Queries:
-        - System DPI scaling (100%, 125%, 150%, etc.)
-        - Primary monitor work area (excludes taskbar)
-        
-        Args:
-            corner: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
-            win_width: Window width in pixels
-            win_height: Window height in pixels
-        
-        Returns:
-            tuple: (x, y) for positioning with consistent visual gap
-        """
-        try:
-            import ctypes
-            import ctypes.wintypes
-            
-            # Query system DPI (96=100%, 120=125%, 144=150%, 192=200%)
-            try:
-                dpi = ctypes.windll.user32.GetDpiForSystem()
-            except AttributeError:
-                dpi = 96
-            scale = dpi / 96.0
-            
-            # Get primary monitor work area (usable rect excluding taskbar)
-            work_area = ctypes.wintypes.RECT()
-            ctypes.windll.user32.SystemParametersInfoW(
-                0x0030, 0, ctypes.byref(work_area), 0  # SPI_GETWORKAREA
-            )
-            
-            # ~10 device-independent pixels gap
-            gap = max(5, round(10 / scale))
-            
-            area_width = work_area.right - work_area.left
-            area_height = work_area.bottom - work_area.top
-            
-            if corner == 0:      # Top-left
-                x = work_area.left + gap
-                y = work_area.top + gap
-            elif corner == 1:    # Top-right
-                x = work_area.left + area_width - win_width - gap
-                y = work_area.top + gap
-            elif corner == 2:    # Bottom-left
-                x = work_area.left + gap
-                y = work_area.top + area_height - win_height - gap
-            else:                # Bottom-right
-                x = work_area.left + area_width - win_width - gap
-                y = work_area.top + area_height - win_height - gap
-            
-            return x, y
-            
-        except Exception:
-            return 30, 30  # Fallback to original
-
-    def _create_terminal_window(self):
-        """Create PyWebView terminal window (start happens on main thread)"""
-        if IS_COMPILED:
-            # Compiled mode - serve from main Flask server (embedded resources)
-            terminal_url = 'http://127.0.0.1:5000/terminal/index.html'
-        else:
-            # Dev mode - use file path directly
-            terminal_url = os.path.normpath(os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                '..', '..', 'sandbox', 'terminal', 'index.html'
-            ))
-        
-        agent_ref = self
-
-        class API:
-            def get_messages(api_self):
-                return agent_ref.get_stream_messages()
-        
-        win_x, win_y = self._get_terminal_position(corner=self.position)
-        
-        self._webview_window = webview.create_window(
-            title='Auto_use_CLI',
-            url=terminal_url,
-            width=550,
-            height=600,
-            x=win_x,
-            y=win_y,
-            resizable=True,
-            background_color='#FFFFFF',
-            js_api=API()
-        )
-    
     def _load_system_prompt(self) -> str:
         """Load system prompt from file"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -386,20 +208,8 @@ class AgentService:
         return f"your_workspace: {workspace}\ncurrent_sitting: {current}"
     
     def process_request(self, task: str) -> str:
-        """Start UI on main thread and run agent loop in background"""
-        if not self._ui_started:
-            self._ui_started = True
-            self._create_terminal_window()
-            
-            def start_agent():
-                # Send window to back after it's created
-                threading.Thread(target=self._send_window_to_back, daemon=True).start()
-                # Start the agent loop
-                threading.Thread(target=self._run_agent_loop, args=(task,), daemon=True).start()
-            
-            webview.start(func=start_agent)
-            return ""
-        
+        """Run the agent loop synchronously. Output streams to stdout for the
+        parent main agent's pill UI."""
         return self._run_agent_loop(task)
      
     def _run_agent_loop(self, task: str) -> str:
@@ -426,9 +236,7 @@ class AgentService:
                 # Read current todo to report what's done/pending
                 todo_status = self._read_todo_from_file()
                 summary = f"Max iterations ({MAX_CLI_ITERATIONS}) reached. Task incomplete. Todo status:\n{todo_status}"
-                
-                self._push_stream("exit", f"Max iterations reached ({MAX_CLI_ITERATIONS}). Returning to main agent.")
-                
+
                 # Notify main agent with partial status
                 if self.on_complete:
                     self.on_complete({
@@ -436,14 +244,7 @@ class AgentService:
                         "summary": summary,
                         "status": "partial"
                     })
-                
-                # Close the terminal window after a brief delay
-                def close_window():
-                    time.sleep(2)
-                    if self._webview_window:
-                        self._webview_window.destroy()
-                threading.Thread(target=close_window, daemon=True).start()
-                
+
                 return "Max iterations reached"
             
             safe_print(f"cli agent running step {step_number}")
@@ -516,7 +317,13 @@ class AgentService:
             try:
                 # Call LLM
                 raw_response = self.llm.send_request(messages)
-                
+
+                # Stream the raw LLM response to stdout. The parent main agent's
+                # subprocess pipe reader picks it up and renders it line-by-line
+                # in the CLI streaming pill UI (no decoration, just raw text).
+                if raw_response:
+                    safe_print(raw_response)
+
                 # Check stop after LLM
                 if self.stop_event and self.stop_event.is_set():
                     break
@@ -531,70 +338,32 @@ class AgentService:
                 if not success:
                     json_fail_count += 1
                     safe_print(f"⚠️ JSON parse failed ({json_fail_count}/3). Discarding and retrying...")
-                    
+
                     if json_fail_count >= 3:
-                        self._push_stream("error", "JSON parsing failed 3 consecutive times. Exiting.")
                         break
-                    
+
                     step_number -= 1
                     continue
-                
-                # Stream agent blocks to terminal UI (thinking, current_goal, memory)
-                try:
-                    response_data = json.loads(normalized)
-                    if "thinking" in response_data:
-                        self._push_stream("thinking", response_data["thinking"])
-                    if "current_goal" in response_data:
-                        self._push_stream("current_goal", response_data["current_goal"])
-                    if "memory" in response_data:
-                        self._push_stream("memory", response_data["memory"])
-                except:
-                    pass
-                    json_fail_count += 1
-                    safe_print(f"⚠️ JSON parse failed ({json_fail_count}/3). Discarding and retrying...")
-                    
-                    if json_fail_count >= 3:
-                        self._push_stream("error", "JSON parsing failed 3 consecutive times. Exiting.")
-                        break
-                    
-                    step_number -= 1
-                    continue
-                
+
                 # Reset consecutive JSON fail counter on success
                 json_fail_count = 0
-                
-                # Stream assistant response to terminal UI
-                self._push_stream("assistant", normalized)
-                
+
                 # Save TRUE agent memory snapshot
                 self._save_conversation_snapshot(messages, normalized, step_number)
-                
+
                 # Remove thinking from response before adding to history (saves tokens)
                 normalized_without_thinking = self._remove_thinking_from_response(normalized)
-                
+
                 # Get action block from validated response (view.py is source of truth)
                 action_block = CLIAgentResponseFormatter.get_action_block(normalized)
-                
-                # Check if web tool is in action block - push web_start before execution
-                web_query = None
-                for action_item in action_block:
-                    if isinstance(action_item, dict) and action_item.get("type") == "web":
-                        web_query = action_item.get("value")
-                        self._push_stream("web_start", web_query)
-                        break
-                
+
                 # Route actions through controller
                 action_result = self.controller.route_action(action_block)
-                
-                # If web tool was used, push web_end after execution
-                if web_query is not None:
-                    self._push_stream("web_end", "")
-                
+
                 # Check if exit (CLI agent termination)
                 if action_result.get("action") == "exit":
                     summary = action_result.get("summary", "Task completed")
-                    self._push_stream("exit", summary)
-                    
+
                     # Notify caller (main agent) if callback provided
                     if self.on_complete:
                         self.on_complete({
@@ -602,18 +371,8 @@ class AgentService:
                             "summary": summary,
                             "status": "complete"
                         })
-                    
-                    # Close the terminal window after a brief delay for exit message to display
-                    def close_window():
-                        time.sleep(2)  # Let user see the exit message
-                        if self._webview_window:
-                            self._webview_window.destroy()
-                    threading.Thread(target=close_window, daemon=True).start()
-                    
+
                     return "Exit"
-                
-                # Stream terminal actions as PowerShell commands
-                self._stream_terminal_action(action_result)
                 
                 # Extract web tool response if present (before formatting last_response)
                 web_tool_response = ""

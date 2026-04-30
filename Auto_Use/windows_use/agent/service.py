@@ -76,7 +76,7 @@ def _cleanup_scratchpad():
 class AgentService:
     """Service for Windows automation agent"""
     
-    def __init__(self, provider: str, model: str, save_conversation: bool = False, thinking: bool = True, frontend_callback=None, text_callback=None, web_callback=None, shell_callback=None, api_key: str = None, stop_event=None):
+    def __init__(self, provider: str, model: str, save_conversation: bool = False, thinking: bool = True, frontend_callback=None, text_callback=None, web_callback=None, shell_callback=None, cli_callback=None, api_key: str = None, stop_event=None):
         """Initialize the Agent Service"""
         # Clean up scratchpad for a fresh start
         _cleanup_scratchpad()
@@ -98,9 +98,12 @@ class AgentService:
         
         # Store shell callback for terminal animation
         self.shell_callback = shell_callback
-        
+
+        # Store CLI callback for streaming CLI agent subprocess output to the frontend
+        self.cli_callback = cli_callback
+
         # Initialize Controller with provider and actual API model name (pass api_key for CLI agent subprocess)
-        self.controller = ControllerView(provider=provider, model=self.llm_manager.get_model_name(), web_callback=web_callback, shell_callback=shell_callback, api_key=api_key, stop_event=stop_event)
+        self.controller = ControllerView(provider=provider, model=self.llm_manager.get_model_name(), web_callback=web_callback, shell_callback=shell_callback, cli_callback=cli_callback, api_key=api_key, stop_event=stop_event)
         
         # Initialize Domain Knowledge Service
         self.domain_knowledge = DomainKnowledgeService()

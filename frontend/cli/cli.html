@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auto-Use CLI</title>
+<style>
+    html, body {
+        margin: 0;
+        padding: 0;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+        background-color: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .blob {
+        position: fixed;
+        z-index: -1;
+        width: 55vw;
+        height: 55vw;
+        max-width: 720px;
+        max-height: 720px;
+        border-radius: 50%;
+        filter: blur(80px);
+        opacity: 0.55;
+        pointer-events: none;
+    }
+
+    .blob-pink {
+        top: 18%;
+        left: 12%;
+        background: radial-gradient(circle at 30% 30%, #d880be 0%, rgba(216, 128, 190, 0) 70%);
+        animation: drift-pink 12s ease-in-out infinite alternate;
+    }
+
+    .blob-purple {
+        bottom: 14%;
+        right: 10%;
+        background: radial-gradient(circle at 70% 70%, #8782eb 0%, rgba(135, 130, 235, 0) 70%);
+        animation: drift-purple 14s ease-in-out infinite alternate;
+    }
+
+    @keyframes drift-pink {
+        0%   { transform: translate(0, 0) scale(1); }
+        100% { transform: translate(8vw, 6vh) scale(1.1); }
+    }
+
+    @keyframes drift-purple {
+        0%   { transform: translate(0, 0) scale(1); }
+        100% { transform: translate(-7vw, -5vh) scale(1.15); }
+    }
+
+    .glass-pill {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        width: clamp(320px, 48vw, 620px);
+        padding-block: clamp(20px, 2.6vw, 30px);
+        padding-inline-start: clamp(18px, 2vw, 26px);
+        padding-inline-end: clamp(40px, 5vw, 60px);
+        border-radius: clamp(40px, 6vw, 70px);
+        box-shadow: 0 clamp(4px, 1vw, 8px) clamp(16px, 3vw, 32px) rgba(0, 0, 0, 0.12);
+    }
+
+
+    .liquidGlass-effect {
+        position: absolute;
+        z-index: 0;
+        inset: 0;
+        backdrop-filter: blur(8px) saturate(180%);
+        -webkit-backdrop-filter: blur(8px) saturate(180%);
+        filter: url(#liquid-glass-button);
+        overflow: hidden;
+        border-radius: inherit;
+        pointer-events: none;
+    }
+
+    .liquidGlass-tint {
+        z-index: 1;
+        position: absolute;
+        inset: 0;
+        background: rgba(200, 200, 200, 0.3);
+        border-radius: inherit;
+        pointer-events: none;
+    }
+
+    .liquidGlass-shine {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        overflow: hidden;
+        border-radius: inherit;
+        pointer-events: none;
+        box-shadow: inset clamp(1px, 0.3vw, 2px) clamp(1px, 0.3vw, 2px) clamp(0.5px, 0.2vw, 1px) 0 rgba(255, 255, 255, 0.6),
+                    inset clamp(-0.5px, -0.2vw, -1px) clamp(-0.5px, -0.2vw, -1px) clamp(0.5px, 0.2vw, 1px) clamp(0.5px, 0.2vw, 1px) rgba(255, 255, 255, 0.6);
+    }
+
+    .liquidGlass-content {
+        position: relative;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        width: 100%;
+    }
+
+    /* From Uiverse.io by Yaya12085 */
+    .loader {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .icon {
+        height: 2.25rem;
+        width: 2.25rem;
+        animation: spin 1s linear infinite;
+        stroke: rgba(107, 114, 128, 1);
+        will-change: transform;
+        transform-origin: 50% 50%;
+        backface-visibility: hidden;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .center-dot {
+        position: absolute;
+        z-index: 4;
+        top: 50%;
+        left: 1.125rem;
+        transform: translate(-50%, -50%);
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #d880be 0%, #8782eb 55%, #6ec5e9 100%);
+        box-shadow:
+            0 0 3px rgba(216, 128, 190, 0.8),
+            0 0 6px rgba(168, 110, 235, 0.55);
+        pointer-events: none;
+    }
+
+    .center-dot::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 1.4rem;
+        height: 1.4rem;
+        border-radius: 50%;
+        background: radial-gradient(
+            circle,
+            rgba(216, 128, 190, 0.65) 0%,
+            rgba(168, 110, 235, 0.40) 45%,
+            transparent 80%
+        );
+        transform: translate(-50%, -50%) scale(0.6);
+        will-change: transform, opacity;
+        animation: dot-breathe 2.2s ease-in-out infinite;
+        pointer-events: none;
+        z-index: -1;
+    }
+
+    @keyframes dot-breathe {
+        0%, 100% {
+            transform: translate(-50%, -50%) scale(0.6);
+            opacity: 0.5;
+        }
+        50% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
+    }
+</style>
+</head>
+<body>
+
+    <div class="blob blob-pink"></div>
+    <div class="blob blob-purple"></div>
+
+    <svg style="display: none">
+        <filter
+            id="glass-distortion"
+            x="-50%"
+            y="-50%"
+            width="200%"
+            height="200%"
+            filterUnits="objectBoundingBox"
+        >
+            <feTurbulence
+                type="fractalNoise"
+                baseFrequency="0.015 0.015"
+                numOctaves="2"
+                seed="5"
+                result="turbulence"
+            />
+
+            <feComponentTransfer in="turbulence" result="mapped">
+                <feFuncR type="gamma" amplitude="1" exponent="8" offset="0.5" />
+                <feFuncG type="gamma" amplitude="0.5" exponent="1" offset="0" />
+                <feFuncB type="gamma" amplitude="0.5" exponent="1" offset="0.5" />
+            </feComponentTransfer>
+
+            <feGaussianBlur in="turbulence" stdDeviation="4" result="softMap" />
+
+            <feSpecularLighting
+                in="softMap"
+                surfaceScale="8"
+                specularConstant="1.2"
+                specularExponent="120"
+                lighting-color="white"
+                result="specLight"
+            >
+                <fePointLight x="-150" y="-150" z="400" />
+            </feSpecularLighting>
+
+            <feComposite
+                in="specLight"
+                operator="arithmetic"
+                k1="0"
+                k2="1"
+                k3="1.2"
+                k4="0"
+                result="litImage"
+            />
+
+            <feDisplacementMap
+                in="SourceGraphic"
+                in2="softMap"
+                scale="200"
+                xChannelSelector="R"
+                yChannelSelector="G"
+            />
+        </filter>
+    </svg>
+
+    <svg style="display: none">
+        <filter
+            id="liquid-glass-button"
+            x="-50%"
+            y="-50%"
+            width="200%"
+            height="200%"
+            filterUnits="objectBoundingBox"
+        >
+            <feTurbulence
+                type="fractalNoise"
+                baseFrequency="0.03 0.05"
+                numOctaves="4"
+                seed="3"
+                result="turbulence"
+            />
+
+            <feComponentTransfer in="turbulence" result="mapped">
+                <feFuncR type="gamma" amplitude="1" exponent="4" offset="0.4" />
+                <feFuncG type="gamma" amplitude="1" exponent="4" offset="0.4" />
+            </feComponentTransfer>
+
+            <feGaussianBlur in="mapped" stdDeviation="2.5" result="softMap" />
+
+            <feDisplacementMap
+                in="SourceGraphic"
+                in2="softMap"
+                scale="25"
+                xChannelSelector="R"
+                yChannelSelector="G"
+            />
+        </filter>
+    </svg>
+
+    <div class="glass-pill">
+        <div class="liquidGlass-effect"></div>
+        <div class="liquidGlass-tint"></div>
+        <div class="liquidGlass-shine"></div>
+        <div class="liquidGlass-content">
+            <div class="loader">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.75V6.25"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.1266 6.87347L16.0659 7.93413"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.25 12H17.75"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.1266 17.1265L16.0659 16.0659"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 17.75V19.25"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6.87338 17.1265L7.93404 16.0659"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.75 12H6.25"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6.87338 6.87347L7.93404 7.93413"></path>
+                </svg>
+                <div class="center-dot"></div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
