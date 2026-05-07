@@ -2126,35 +2126,26 @@ body.cli-mode .settings-btn {
 }
 
 /* loader column on the left of the pill.
-   Size is locked to 24px so it's a clean 1:1 with the SVG's
-   viewBox="0 0 24 24" — every user unit lands on a CSS pixel boundary,
-   eliminating the sub-pixel raster wobble that made the rotating
-   spokes appear to drift in a small circle. */
+   28×28 slot for the particle-engine canvas. The canvas owns its own
+   animation (loader spokes / globe / tick) and morphs between them
+   when the pill state changes. */
 .cli-pill-loader {
     position: relative;
     flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     align-self: center;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.cli-pill-icon {
+.cli-pill-canvas {
     display: block;
-    height: 24px;
-    width: 24px;
-    stroke: rgba(107, 114, 128, 1);
-    animation: cli-pill-spin 1s linear infinite;
-    will-change: transform;
-    transform-origin: center;
-    backface-visibility: hidden;
-    shape-rendering: geometricPrecision;
-}
-
-@keyframes cli-pill-spin {
-    to { transform: rotate(360deg); }
+    width: 20px;
+    height: 20px;
+    /* Fade controlled by JS for the post-tick "all CLI done + 1s hold" sequence. */
+    transition: opacity 0.4s ease;
 }
 
 /* status glyph — hidden until pill goes complete */
@@ -2231,11 +2222,13 @@ body.cli-mode .settings-btn {
     to { opacity: 1; }
 }
 
-/* ---------- complete state ---------- */
+/* ---------- complete state ----------
+   Canvas tick is the success indicator; legacy ✓ glyph is hidden.
+   For error/stopped the canvas fades out via .canvas-faded and
+   the legacy ✕ glyph paints in its place. */
 
-.cli-pill.complete .cli-pill-icon {
+.cli-pill.complete .cli-pill-canvas.canvas-faded {
     opacity: 0;
-    animation-play-state: paused;
 }
 
 .cli-pill.complete .cli-pill-status {
@@ -2243,14 +2236,29 @@ body.cli-mode .settings-btn {
 }
 
 .cli-pill[data-status="complete"] .cli-pill-status::before {
+    /* Canvas tick replaces this — keep glyph hidden by default. JS adds
+       .show-status-glyph to a pill once the canvas has faded out, at which
+       point the ✓ becomes visible. */
     content: '✓';
     color: rgba(64, 160, 110, 0.95);
+    display: none;
+}
+
+.cli-pill[data-status="complete"].show-status-glyph .cli-pill-status::before {
+    display: block;
 }
 
 .cli-pill[data-status="error"] .cli-pill-status::before,
 .cli-pill[data-status="stopped"] .cli-pill-status::before {
     content: '✕';
     color: rgba(200, 70, 90, 0.95);
+}
+
+/* Hide the canvas under the ✕ glyph for error/stopped — we don't have a
+   particle "fail" shape, so just let the legacy glyph take over. */
+.cli-pill[data-status="error"] .cli-pill-canvas,
+.cli-pill[data-status="stopped"] .cli-pill-canvas {
+    opacity: 0;
 }
 
 .cli-pill.complete .cli-output {
@@ -2321,67 +2329,8 @@ body.cli-mode .settings-btn {
 
 /* ============================================================
    Web-loading state on a pill.
-   When the pill enters .web-loading (e.g. CLI agent's web tool is fetching),
-   the streamed output is muted and a clean "web" label with three pulsing
-   dots takes its place. Comes off when the web call completes.
+   When the pill enters .web-loading (CLI agent's web tool is fetching),
+   the canvas icon morphs to the spinning globe and the body streams a
+   loop of funny scraping/searching phrases (handled in script.js).
+   No CSS overlay — globe icon + streamed phrases are the cue.
    ============================================================ */
-
-/* Mute the streaming output without removing it from the DOM, so when the
-   web call ends the next streamed line continues from where it left off. */
-.cli-pill.web-loading .cli-output {
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-
-/* The "web" label + dots overlay, drawn into the pill body. ::after on the
-   .cli-pill-body so it sits over the muted .cli-output, vertically centered. */
-.cli-pill.web-loading .cli-pill-body {
-    position: relative;
-}
-.cli-pill.web-loading .cli-pill-body::after {
-    content: 'web';
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: clamp(11px, 0.85vw, 12.5px);
-    color: rgba(70, 70, 75, 0.92);
-    pointer-events: none;
-    /* Three pulsing dots are added below via a sibling ::before pseudo-element
-       containing radial-gradient circles; each fades in and out staggered. */
-}
-
-/* Three pulsing dots after the "web" text. We render them as a radial-gradient
-   pattern on a single ::before so we don't need extra DOM, then animate the
-   background-position to give the illusion of cascading pulses. */
-.cli-pill.web-loading .cli-pill-body::before {
-    content: '';
-    position: absolute;
-    /* sit just to the right of the "web" label — exact left offset depends on
-       font but ~36px works for the clamp range above. */
-    left: 38px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 22px;
-    height: 6px;
-    background-image:
-        radial-gradient(circle, rgba(70, 70, 75, 0.85) 50%, transparent 60%),
-        radial-gradient(circle, rgba(70, 70, 75, 0.85) 50%, transparent 60%),
-        radial-gradient(circle, rgba(70, 70, 75, 0.85) 50%, transparent 60%);
-    background-repeat: no-repeat;
-    background-size: 4px 4px;
-    background-position: 0 50%, 9px 50%, 18px 50%;
-    /* Each dot fades in and out in sequence — using a simple opacity animation
-       on the whole element produces a soft pulse. For staggered per-dot effects
-       we'd need 3 separate elements (kept simple here). */
-    animation: web-loading-pulse 1.4s ease-in-out infinite;
-    pointer-events: none;
-}
-
-@keyframes web-loading-pulse {
-    0%   { opacity: 0.25; }
-    50%  { opacity: 1; }
-    100% { opacity: 0.25; }
-}
