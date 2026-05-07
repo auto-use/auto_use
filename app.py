@@ -895,6 +895,20 @@ def main():
             debug_exception("CLI mode")
         return
 
+    if "--minion-mode" in sys.argv:
+        # Minion mode - delegate to the platform-specific minion sub-agent.
+        # Required when running from the compiled binary, where the controller
+        # re-execs AutoUse with --minion-mode instead of `python -m ...minions`.
+        sys.argv.remove("--minion-mode")
+        try:
+            minion_main = importlib.import_module(
+                f"Auto_Use.{PLATFORM_PKG}.agent.cli.minions.__main__"
+            ).main
+            minion_main()
+        except Exception:
+            debug_exception("Minion mode")
+        return
+
     # Clean scratchpad on startup
     clean_scratchpad()
 
