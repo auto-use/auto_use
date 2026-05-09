@@ -17,10 +17,14 @@
 # A small attribution goes a long way toward a healthy open-source
 # community — thank you for contributing.
 
-# Controller module for action block code routes
-from .view import ControllerView
-from .service import ControllerService
-from .task_tracker import TaskTrackerService
-from .scratchpad import ScratchpadService
+# Minion sub-agent package.
+# Mirrors the cli/ package structure:
+#   - service.py        : full agent loop (read-only scout variant)
+#   - view.py           : MinionResponseFormatter (next_goal-shape JSON validator)
+#   - __main__.py       : subprocess entry — `python -m ...agent.cli.minions`
+#   - system_prompt.md  : read-only scout system prompt
 
-__all__ = ['ControllerView', 'ControllerService', 'TaskTrackerService', 'ScratchpadService']
+from .service import AgentService
+from .view import MinionResponseFormatter
+
+__all__ = ['AgentService', 'MinionResponseFormatter']

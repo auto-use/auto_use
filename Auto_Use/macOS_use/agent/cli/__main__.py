@@ -102,6 +102,14 @@ Examples:
         default=None,
         help="Runtime API key for LLM provider (optional, falls back to .env)"
     )
+    parser.add_argument(
+        "--no_external_terminal",
+        action="store_true",
+        default=False,
+        help="Disable spawning sub-agents (minions) in new Terminal.app windows. "
+             "Default: terminals ON for cli.py / main.py terminal UX. Pass this from "
+             "app.py / headless mode to keep minion subprocesses hidden."
+    )
 
     args = parser.parse_args()
 
@@ -131,6 +139,7 @@ Examples:
         api_key=args.api_key,
         task=args.task,
         on_complete=on_complete if args.result else None,
+        external_terminal=not args.no_external_terminal,
     )
     agent.process_request(args.task)
 

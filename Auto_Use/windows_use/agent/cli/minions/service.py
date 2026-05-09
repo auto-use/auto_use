@@ -17,6 +17,20 @@
 # A small attribution goes a long way toward a healthy open-source
 # community — thank you for contributing.
 
+"""
+Minion Sub-Agent Service — read-only scout sub-agent loop.
+
+Mirror of cli/service.py with three intentional differences:
+  1. Loads minions/system_prompt.md (read-only scout prompt, next_goal blocks).
+  2. Uses MINION_SCHEMA via LLMManager(mode="minion"); no write/replace/web/wait/todo.
+  3. user_message injects <scratchpad> (per the minion prompt's <input> contract)
+     instead of <todo_list> (which the CLI agent uses).
+
+Everything else — the agent-loop shape, history threading, prompt caching, JSON
+extraction, action routing through ControllerView, exit semantics — mirrors the
+CLI agent so future maintenance can be done by reference.
+"""
+
 import os
 import time
 import json
@@ -30,12 +44,10 @@ from datetime import datetime
 from typing import Optional
 import threading
 
-import subprocess
-from ...llm_provider.llm_manager import LLMManager
-from ...controller.view import ControllerView
-from .view import CLIAgentResponseFormatter
+from ....llm_provider.llm_manager import LLMManager
+from ....controller.view import ControllerView
+from .view import MinionResponseFormatter
 
-# Import debug_log and IS_COMPILED for safe logging in compiled mode
 try:
     from app import debug_log, IS_COMPILED
 except ImportError:
@@ -43,21 +55,12 @@ except ImportError:
         pass
     IS_COMPILED = False
 
-# =============================================================================
-# FIX FOR COMPILED CLI SUBPROCESS: Ensure stdout/stderr are valid
-# PyInstaller --windowed builds set sys.stdout/stderr to None at startup
-# (no console). When the main agent spawns this binary as a subprocess via
-# `subprocess.Popen(..., stdout=PIPE, stderr=PIPE)`, the OS-level fds 1 and
-# 2 ARE valid pipe ends connected to the parent's reader threads — we just
-# need a Python wrapper around them so safe_print() actually flows through.
-# Falling back to io.StringIO() (the old behavior) silently swallowed every
-# line, which is exactly why the streaming pill stayed empty in the .app.
-# =============================================================================
+
 def _ensure_real_stdio_or_fallback():
     for name, fd in (('stdout', 1), ('stderr', 2)):
         stream = getattr(sys, name, None)
         if stream is not None and not (hasattr(stream, 'closed') and stream.closed):
-            continue  # already valid (dev mode) — leave it alone
+            continue
         try:
             raw = os.fdopen(fd, 'wb', buffering=0, closefd=False)
             wrapped = io.TextIOWrapper(
@@ -69,103 +72,89 @@ def _ensure_real_stdio_or_fallback():
             )
             setattr(sys, name, wrapped)
         except OSError:
-            # fd is unusable (truly headless, no parent pipe) — last-resort
-            # in-memory buffer so safe_print doesn't raise.
             setattr(sys, name, io.StringIO())
 
 _ensure_real_stdio_or_fallback()
 
-# Safe print function that won't crash on closed stdout
+
 def safe_print(*args, **kwargs):
-    """Print that won't crash if stdout is unavailable.
-    Always forces flush so the parent process's pipe reader sees output
-    immediately (the streaming pill UI relies on prompt line delivery)."""
+    """Print that won't crash if stdout is unavailable."""
     kwargs.setdefault("flush", True)
     try:
         print(*args, **kwargs)
     except (ValueError, OSError, AttributeError):
-        # I/O operation on closed file or similar - just log instead
         msg = ' '.join(str(a) for a in args)
         debug_log(f"[PRINT] {msg}")
 
-# Maximum iterations before CLI agent auto-exits (prevents infinite loops)
-MAX_CLI_ITERATIONS = 50
+
+# Minion runs are bounded — its job is location-finding, not multi-step coding.
+MAX_MINION_ITERATIONS = 30
 
 
 class AgentService:
-    """CLI Agent Service - Agentic loop only"""
-    
+    """Minion Agent Service - read-only scout sub-agent loop."""
+
     def __init__(self, provider: str, model: str, save_conversation: bool = False,
                  thinking: bool = True, api_key: str = None, stop_event=None,
-                 task: str = None, on_complete: callable = None,
-                 external_terminal: bool = True):
+                 task: str = None, on_complete: callable = None):
 
         self.provider = provider
         self.model = model
         self.save_conversation = save_conversation
         self.stop_event = stop_event
-        self.task = task  # Task description (for tracking when called as service)
-        self.on_complete = on_complete  # Callback when CLI agent exits
-        # When True, sub-spawns (minions) get their own visible Terminal.app window.
-        # Default True so cli.py and main.py terminal flows show every sub-agent live;
-        # app.py / UI mode can pass False to keep them hidden.
-        self.external_terminal = external_terminal
+        self.task = task
+        self.on_complete = on_complete
 
-        # Generate unique session ID for complete isolation
+        # Generate unique session ID for complete isolation (cli_minion/{sid}/...)
         self.session_id = uuid.uuid4().hex[:8]
 
-        # Initialize LLM Manager
+        # Initialize LLM Manager in minion mode → MINION_SCHEMA (no write/replace/web/todo).
         self.llm = LLMManager(
             provider=provider,
             model=model,
             thinking=thinking,
             api_key=api_key,
-            cli_agent=True
+            cli_agent=True,
+            mode="minion",
         )
 
-        # Initialize Controller with cli_mode + session_id for isolation, and propagate
-        # external_terminal so spawned minions (via the `minion` action) inherit the
-        # same "give each sub-agent its own visible Terminal.app window" behavior.
+        # Initialize Controller in cli_mode + minion_mode so scratchpad routes to
+        # scratchpad/cli_minion/{session_id}/ and never touches the parent CLI agent's
+        # cli_milestone/ folder.
         self.controller = ControllerView(
             provider=provider, model=model,
             cli_mode=True, session_id=self.session_id,
             api_key=api_key,
-            external_terminal=external_terminal,
+            minion_mode=True,
         )
 
-        # Load system prompt
+        # Response formatter — minion-specific (validates next_goal-shape responses).
+        self.formatter = MinionResponseFormatter
+
+        # Load minion system prompt (sibling system_prompt.md inside this minions/ package).
         self.system_prompt = self._load_system_prompt()
-        
-        # Setup session-specific conversation directory (subfolder inside cli_conversation)
+
         if self.save_conversation:
-            self.conversation_dir = Path("cli_conversation") / self.session_id
+            self.conversation_dir = Path("cli_minion_conversation") / self.session_id
             self.conversation_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Create raw_reasoning directory for storing raw LLM outputs (for debugging)
             self.raw_reasoning_dir = self.conversation_dir / "raw_reasoning"
             self.raw_reasoning_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.interaction_count = 0
-        self._pending_web_response = ""  # Store web response for next iteration
-    
+
     def _save_conversation_snapshot(self, messages: list, current_assistant_response: str, interaction_count: int):
-        """Save TRUE agent memory - exactly what LLM receives at each step
-        
-        Dumps the actual messages list sent to the API. One source of truth.
-        """
+        """Save TRUE agent memory — exactly what LLM receives at each step."""
         if not self.save_conversation:
             return
-        
+
         conversation_file = self.conversation_dir / f"conversation_{interaction_count}.txt"
-        
+
         with open(conversation_file, 'w', encoding='utf-8') as f:
-            # Header
-            f.write("=== CLI AGENT MEMORY SNAPSHOT ===\n")
+            f.write("=== MINION MEMORY SNAPSHOT ===\n")
             f.write(f"Step: {interaction_count}\n")
             f.write(f"Time: {datetime.now()}\n")
             f.write("=" * 60 + "\n\n")
-            
-            # Dump every message exactly as sent to the API
+
             for i, msg in enumerate(messages):
                 role = msg["role"]
                 content = msg["content"]
@@ -176,14 +165,13 @@ class AgentService:
                 else:
                     f.write(content)
                 f.write("\n\n" + "=" * 60 + "\n\n")
-            
-            # Current assistant response (not yet in messages list)
+
             f.write(f"=== CURRENT ASSISTANT RESPONSE (role='assistant') ===\n")
             f.write(current_assistant_response)
             f.write("\n")
-    
+
     def _save_raw_response(self, raw_response: str, step_number: int):
-        """Save raw LLM response before any parsing/normalization (for debugging)"""
+        """Save raw LLM response before any parsing/normalization (for debugging)."""
         if self.save_conversation:
             try:
                 raw_file = self.raw_reasoning_dir / f"raw_response_{step_number}.txt"
@@ -191,88 +179,73 @@ class AgentService:
                     f.write(raw_response)
             except Exception as e:
                 safe_print(f"⚠ Error saving raw response: {str(e)}")
-    
+
     def _load_system_prompt(self) -> str:
-        """Load system prompt from file"""
+        """Load minion system prompt from sibling system_prompt.md."""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         prompt_path = os.path.join(current_dir, "system_prompt.md")
 
         with open(prompt_path, 'r', encoding='utf-8') as f:
             return f.read()
-    
+
     def _remove_thinking_from_response(self, response_json: str) -> str:
-        """Remove 'thinking' field from assistant response to save tokens in history"""
+        """Remove 'thinking' field from assistant response to save tokens in history."""
         try:
             response_data = json.loads(response_json)
-            
-            # Remove thinking field if it exists
             if "thinking" in response_data:
                 del response_data["thinking"]
-            
             return json.dumps(response_data, indent=2, ensure_ascii=False)
         except Exception:
             return response_json
-    
+
     def _remove_agent_sitting_from_user_message(self, user_message: str) -> str:
-        """Remove <agent_sitting> block from user message to save tokens in history"""
+        """Remove <agent_sitting> block from user message to save tokens in history."""
         try:
-            # Remove <agent_sitting>...</agent_sitting> block
             cleaned = re.sub(r'<agent_sitting>.*?</agent_sitting>', '', user_message, flags=re.DOTALL)
-            # Clean up extra whitespace
             cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
             return cleaned.strip()
         except Exception:
             return user_message
-    
-    def _read_todo_from_file(self) -> str:
-        """Read the current todo list from cli_todo/todo.md file"""
+
+    def _read_scratchpad_from_file(self) -> str:
+        """Read the minion's scratchpad (cli_minion/{session_id}/milestone.md)."""
         try:
-            todo_file = Path(self.controller.task_tracker.todo_file)
-            if todo_file.exists():
-                with open(todo_file, 'r', encoding='utf-8') as f:
-                    return f.read().strip()
-            else:
-                return ""
-        except Exception as e:
+            return self.controller.scratchpad_service.read_scratchpad()
+        except Exception:
             return ""
-    
+
     def _get_agent_sitting(self) -> str:
-        """Get agent workspace and current directory info"""
+        """Get agent workspace and current directory info."""
         workspace = str(self.controller.cli_service.sandbox.sandbox_root)
         current = self.controller.cli_service.sandbox.get_cwd()
         return f"your_workspace: {workspace}\ncurrent_sitting: {current}"
-    
+
     def process_request(self, task: str) -> str:
-        """Run the agent loop synchronously. Output streams to stdout for the
-        parent main agent's pill UI."""
+        """Run the minion loop synchronously."""
         return self._run_agent_loop(task)
-     
+
     def _run_agent_loop(self, task: str) -> str:
-        """Main agentic loop"""
-        
+        """Main agentic loop — mirrors cli/service.py with scratchpad-in-user-message."""
+
         step_number = 0
         last_response = None
         is_first = True
-        history = []  # List of (assistant_response, tool_response) tuples
-        json_fail_count = 0  # Track consecutive JSON parse failures (max 3 before exit)
-        
-        while True:
-            # Check stop
-            if self.stop_event and self.stop_event.is_set():
-                safe_print("Agent stopped.")
-                break
-            
-            step_number += 1
-            
-            # Check max iterations limit
-            if step_number > MAX_CLI_ITERATIONS:
-                safe_print(f"CLI Agent reached max iterations ({MAX_CLI_ITERATIONS})")
-                
-                # Read current todo to report what's done/pending
-                todo_status = self._read_todo_from_file()
-                summary = f"Max iterations ({MAX_CLI_ITERATIONS}) reached. Task incomplete. Todo status:\n{todo_status}"
+        history = []
+        json_fail_count = 0
 
-                # Notify main agent with partial status
+        while True:
+            if self.stop_event and self.stop_event.is_set():
+                safe_print("Minion stopped.")
+                break
+
+            step_number += 1
+
+            if step_number > MAX_MINION_ITERATIONS:
+                safe_print(f"Minion reached max iterations ({MAX_MINION_ITERATIONS})")
+
+                scratchpad_status = self._read_scratchpad_from_file()
+                summary = f"Max iterations ({MAX_MINION_ITERATIONS}) reached. Findings so far:\n{scratchpad_status}"
+
                 if self.on_complete:
                     self.on_complete({
                         "task": self.task,
@@ -281,62 +254,52 @@ class AgentService:
                     })
 
                 return "Max iterations reached"
-            
-            safe_print(f"cli agent running step {step_number}")
-            
-            # Get agent sitting info
+
+            safe_print(f"minion running step {step_number}")
+
             agent_sitting = self._get_agent_sitting()
-            
-            # Read fresh todo
-            todo_list = self._read_todo_from_file()
-            
-            # Build user message (tool_response now in history, not here)
+
+            # Read fresh scratchpad — minion's prompt expects <scratchpad> in <input>,
+            # NOT <todo_list> like the CLI agent.
+            scratchpad_content = self._read_scratchpad_from_file()
+
             if is_first:
                 user_message = f"<user_request>\n{task}\n</user_request>\n\n<agent_sitting>\n{agent_sitting}\n</agent_sitting>"
             else:
-                user_message = f"<user_request>\n{task}\n</user_request>\n\n<todo_list>\n{todo_list}\n</todo_list>\n\n<agent_sitting>\n{agent_sitting}\n</agent_sitting>"
-                
-                # Inject web tool response if pending from previous iteration (Note is already embedded in each result)
-                if self._pending_web_response:
-                    user_message += f"\n\n{self._pending_web_response}"
-                    self._pending_web_response = ""  # Clear after injecting
-            
+                scratchpad_block = scratchpad_content if scratchpad_content else "none"
+                user_message = (
+                    f"<user_request>\n{task}\n</user_request>\n\n"
+                    f"<scratchpad>\n{scratchpad_block}\n</scratchpad>\n\n"
+                    f"<agent_sitting>\n{agent_sitting}\n</agent_sitting>"
+                )
+
             # Build messages with proper history (assistant + tool_response pairs)
             messages = [{"role": "system", "content": self.system_prompt}]
-            
+
             if len(history) > 0 and not is_first:
-                # Step 1: prepend user task (reinforces objective in context)
                 step1_msg = history[0][0]
                 messages.append({"role": "assistant", "content": f"<User_Task>\n{task}\n</User_Task>\n\n{step1_msg}"})
-                
+
                 if len(history) == 1:
-                    # Only one history item - merge its tool_response with current user_message
                     if history[0][1]:
                         user_message = f"{history[0][1]}\n\n{user_message}"
                 else:
-                    # Multiple history items
-                    # Step 1's tool response
                     if history[0][1]:
                         messages.append({"role": "user", "content": history[0][1]})
-                    
-                    # Middle items (history[1:-1])
+
                     for assistant_msg, tool_response in history[1:-1]:
                         messages.append({"role": "assistant", "content": assistant_msg})
                         if tool_response:
                             messages.append({"role": "user", "content": tool_response})
-                    
-                    # Last item - its tool_response combines with current user_message
+
                     last_assistant, last_tool_response = history[-1]
                     messages.append({"role": "assistant", "content": last_assistant})
                     if last_tool_response:
                         user_message = f"{last_tool_response}\n\n{user_message}"
-            
-            # Add current user message
+
             messages.append({"role": "user", "content": user_message})
-            
-            # Apply prompt caching for OpenRouter (Gemini/Claude need explicit cache_control)
-            # Cache everything up to the last message before current user message
-            # For Groq and OpenAI, caching is automatic - no changes needed
+
+            # Prompt caching for OpenRouter / Anthropic — same as CLI agent.
             if self.provider in ("openrouter", "anthropic") and len(messages) > 2:
                 cache_idx = len(messages) - 2
                 content = messages[cache_idx]["content"]
@@ -348,28 +311,20 @@ class AgentService:
                             "cache_control": {"type": "ephemeral"}
                         }
                     ]
-            
+
             try:
-                # Call LLM
                 raw_response = self.llm.send_request(messages)
 
-                # Stream the raw LLM response to stdout. The parent main agent's
-                # subprocess pipe reader picks it up and renders it line-by-line
-                # in the CLI streaming pill UI (no decoration, just raw text).
                 if raw_response:
                     safe_print(raw_response)
 
-                # Check stop after LLM
                 if self.stop_event and self.stop_event.is_set():
                     break
-                
-                # Save raw response before any parsing (for debugging)
+
                 self._save_raw_response(raw_response, step_number)
-                
-                # Validate and normalize response
-                success, normalized, failed_raw = CLIAgentResponseFormatter.normalize_response(raw_response)
-                
-                # If JSON parse failed, discard response and retry with fresh context
+
+                success, normalized, failed_raw = self.formatter.normalize_response(raw_response)
+
                 if not success:
                     json_fail_count += 1
                     safe_print(f"⚠️ JSON parse failed ({json_fail_count}/3). Discarding and retrying...")
@@ -380,26 +335,21 @@ class AgentService:
                     step_number -= 1
                     continue
 
-                # Reset consecutive JSON fail counter on success
                 json_fail_count = 0
 
-                # Save TRUE agent memory snapshot
                 self._save_conversation_snapshot(messages, normalized, step_number)
 
-                # Remove thinking from response before adding to history (saves tokens)
                 normalized_without_thinking = self._remove_thinking_from_response(normalized)
 
-                # Get action block from validated response (view.py is source of truth)
-                action_block = CLIAgentResponseFormatter.get_action_block(normalized)
+                action_block = self.formatter.get_action_block(normalized)
 
-                # Route actions through controller
                 action_result = self.controller.route_action(action_block)
 
-                # Check if exit (CLI agent termination)
+                # Minion exit — deliver structured summary back to caller (parent
+                # controller writes the result file via on_complete).
                 if action_result.get("action") == "exit":
-                    summary = action_result.get("summary", "Task completed")
+                    summary = action_result.get("summary", "Findings ready.")
 
-                    # Notify caller (main agent) if callback provided
                     if self.on_complete:
                         self.on_complete({
                             "task": self.task,
@@ -408,38 +358,18 @@ class AgentService:
                         })
 
                     return "Exit"
-                
-                # Extract web tool response if present (before formatting last_response)
-                web_tool_response = ""
-                web_results_list = []
-                if action_result.get("tool") == "web" and "result" in action_result:
-                    web_results_list.append(action_result["result"])
-                    del action_result["result"]  # Remove from action_result to avoid duplication
-                elif action_result.get("action") == "multiple" and "results" in action_result:
-                    for idx, result in enumerate(action_result["results"]):
-                        if result.get("tool") == "web" and "result" in result:
-                            web_results_list.append(result["result"])
-                            del action_result["results"][idx]["result"]
-                
-                # Combine all web results with newlines, wrap in <tool> tag
-                if web_results_list:
-                    web_tool_response = "<tool>\n" + "\n".join(web_results_list) + "\n</tool>"
-                
-                # Store web response for next iteration
-                self._pending_web_response = web_tool_response
-                
-                # Format result based on action type
+
+                # Format result block for next iteration's <Tool_response>.
+                # Minion only emits shell/view/grep/glob/scratchpad/exit — keep just
+                # those branches; defensive `else` handles unexpected shapes.
                 if action_result.get("action") == "shell":
                     status = action_result.get("status", "success")
-                    
-                    # Only show status line for timeout or error
                     if status == "timeout" or status == "input_required":
                         status_line = "status: timeout (may need input parameter)\n"
                     elif status == "error":
                         status_line = f"status: error\nerror: {action_result.get('error', '')}\n"
                     else:
                         status_line = ""
-                    
                     last_response = f"""<Tool_response>
 <shell>
 {status_line}cwd: {action_result.get("cwd", "")}
@@ -448,16 +378,7 @@ output:
 {action_result.get("output", "")}
 </shell>
 </Tool_response>"""
-                
-                elif action_result.get("action") == "write":
-                    last_response = f"""<Tool_response>
-<write>
-command: {action_result.get("command", "")}
-status: {action_result.get("status", "")}
-output: {action_result.get("output", "")}
-</write>
-</Tool_response>"""
-                
+
                 elif action_result.get("action") == "view":
                     last_response = f"""<Tool_response>
 <view>
@@ -488,17 +409,7 @@ output:
 </glob>
 </Tool_response>"""
 
-                elif action_result.get("action") == "replace":
-                    last_response = f"""<Tool_response>
-<replace>
-command: {action_result.get("command", "")}
-status: {action_result.get("status", "")}
-output: {action_result.get("output", "")}
-</replace>
-</Tool_response>"""
-                
                 elif action_result.get("action") == "multiple":
-                    # Format multiple action results with proper newlines
                     formatted_results = []
                     for result in action_result.get("results", []):
                         if result.get("action") == "shell":
@@ -536,53 +447,28 @@ status: {result.get("status", "")}
 output:
 {result.get("output", "")}
 </glob>""")
-                        elif result.get("action") == "write":
-                            formatted_results.append(f"""<write>
-command: {result.get("command", "")}
-status: {result.get("status", "")}
-output: {result.get("output", "")}
-</write>""")
-                        elif result.get("action") == "replace":
-                            formatted_results.append(f"""<replace>
-command: {result.get("command", "")}
-status: {result.get("status", "")}
-output: {result.get("output", "")}
-</replace>""")
-                        elif result.get("action") == "todo_updated":
-                            formatted_results.append(f"""<todo_updated>
-task: {result.get("task", "")}
-</todo_updated>""")
                         elif result.get("action") == "scratchpad_added":
                             formatted_results.append(f"""<scratchpad_added>
 scratchpad: {result.get("scratchpad", "")}
 </scratchpad_added>""")
-                        elif result.get("action") == "minion_completed":
-                            formatted_results.append(f"""<minion_completed>
-status: {result.get("status", "")}
-query: {result.get("query", "")}
-output:
-{result.get("output", "")}
-</minion_completed>""")
                         else:
-                            # For other actions, simple format
                             action_name = result.get("action", "result")
                             formatted_results.append(f"<{action_name}>\nstatus: {result.get('status', 'success')}\n</{action_name}>")
-                    
+
                     last_response = f"<Tool_response>\n" + "\n\n".join(formatted_results) + "\n</Tool_response>"
-                
+
                 else:
                     last_response = f"<Tool_response>\n{json.dumps(action_result, indent=2)}\n</Tool_response>"
-                
-                # Add to history: (assistant_response, tool_response)
+
                 history.append((normalized_without_thinking, last_response))
-                
+
                 is_first = False
-                
+
             except Exception as e:
                 safe_print(f"Error: {str(e)}")
-                debug_log(f"CLI Agent loop error: {str(e)}", "ERROR")
+                debug_log(f"Minion loop error: {str(e)}", "ERROR")
                 import traceback
-                debug_log(f"CLI Agent traceback: {traceback.format_exc()}", "ERROR")
+                debug_log(f"Minion traceback: {traceback.format_exc()}", "ERROR")
                 break
-        
+
         return "Agent loop ended"

@@ -71,6 +71,31 @@ else:
 IS_COMPILED = getattr(sys, 'frozen', False) or '__compiled__' in dir()
 IS_CLI_SUBPROCESS = "--cli-mode" in sys.argv
 
+
+def app_data_dir() -> Path:
+    """Root folder for cli_agent_result/ and cli_minion_result/ in the binary build.
+
+    Compiled binary: ~/Library/Application Support/AutoUse on macOS,
+    %LOCALAPPDATA%/AutoUse on Windows. Keeps user data out of /Applications/
+    (or wherever the binary's CWD ends up at launch).
+
+    Dev mode: project root (where app.py lives), so `python app.py` keeps
+    writing these folders into the repo as before.
+    """
+    if IS_COMPILED:
+        if sys.platform == "darwin":
+            base = Path.home() / "Library" / "Application Support" / "AutoUse"
+        elif sys.platform.startswith("win"):
+            local = os.environ.get("LOCALAPPDATA")
+            base = Path(local) / "AutoUse" if local else Path.home() / "AppData" / "Local" / "AutoUse"
+        else:
+            base = Path.home() / ".local" / "share" / "AutoUse"
+    else:
+        base = Path(__file__).resolve().parent
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
 def get_log_path():
     """Get path for debug log file (only used in compiled mode)"""
     return os.path.join(os.path.dirname(sys.executable), "autouse_debug.log")
@@ -663,6 +688,41 @@ def send_cli_event_to_frontend(event_type, *args):
             webview_window.evaluate_js(
                 f"window.cliTaskEnd && window.cliTaskEnd('{task_id}', '{status}', '{summary}')"
             )
+        elif event_type == "minion_start":
+            # parent_task_id is the spawning CLI agent's task_id; task_id is the minion's own.
+            parent_task_id = _js_escape(args[0] if len(args) > 0 else "")
+            task_id = _js_escape(args[1] if len(args) > 1 else "")
+            query = _js_escape(args[2] if len(args) > 2 else "")
+            webview_window.evaluate_js(
+                f"window.cliMinionStart && window.cliMinionStart('{parent_task_id}', '{task_id}', '{query}')"
+            )
+        elif event_type == "minion_end":
+            task_id = _js_escape(args[0] if len(args) > 0 else "")
+            status = _js_escape(args[1] if len(args) > 1 else "complete")
+            summary = _js_escape(args[2] if len(args) > 2 else "")
+            webview_window.evaluate_js(
+                f"window.cliMinionEnd && window.cliMinionEnd('{task_id}', '{status}', '{summary}')"
+            )
+        elif event_type == "minion_line":
+            # Live stdout/stderr from a running minion — streams into its pill body.
+            task_id = _js_escape(args[0] if len(args) > 0 else "")
+            line = _js_escape(args[1] if len(args) > 1 else "")
+            stream = _js_escape(args[2] if len(args) > 2 else "out")
+            webview_window.evaluate_js(
+                f"window.cliMinionLine && window.cliMinionLine('{task_id}', '{line}', '{stream}')"
+            )
+        elif event_type == "pill_web_loading_start":
+            # Web tool started inside a piped CLI subprocess — show clean dots-loading
+            # visual on the parent CLI pill (replaces the ugly "🌐 Web..." stream).
+            task_id = _js_escape(args[0] if len(args) > 0 else "")
+            webview_window.evaluate_js(
+                f"window.cliPillWebLoadingStart && window.cliPillWebLoadingStart('{task_id}')"
+            )
+        elif event_type == "pill_web_loading_end":
+            task_id = _js_escape(args[0] if len(args) > 0 else "")
+            webview_window.evaluate_js(
+                f"window.cliPillWebLoadingEnd && window.cliPillWebLoadingEnd('{task_id}')"
+            )
     except Exception:
         debug_exception(f"send_cli_event_to_frontend({event_type})")
 
@@ -858,6 +918,20 @@ def main():
             cli_main()
         except Exception:
             debug_exception("CLI mode")
+        return
+
+    if "--minion-mode" in sys.argv:
+        # Minion mode - delegate to the platform-specific minion sub-agent.
+        # Required when running from the compiled binary, where the controller
+        # re-execs AutoUse with --minion-mode instead of `python -m ...minions`.
+        sys.argv.remove("--minion-mode")
+        try:
+            minion_main = importlib.import_module(
+                f"Auto_Use.{PLATFORM_PKG}.agent.cli.minions.__main__"
+            ).main
+            minion_main()
+        except Exception:
+            debug_exception("Minion mode")
         return
 
     # Clean scratchpad on startup

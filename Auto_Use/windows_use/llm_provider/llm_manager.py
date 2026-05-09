@@ -69,9 +69,37 @@ CLI_AGENT_SCHEMA = {
                             "type": "object",
                             "properties": {
                                 "type": {"type": "string", "const": "view"},
-                                "path": {"type": "string"}
+                                "path": {"type": "string"},
+                                "start": {"type": "integer"},
+                                "end": {"type": "integer"}
                             },
-                            "required": ["type", "path"],
+                            "required": ["type", "path", "start", "end"],
+                            "additionalProperties": False
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "const": "grep"},
+                                "pattern": {"type": "string"},
+                                "path": {"type": "string"},
+                                "glob": {"type": "string"},
+                                "output_mode": {"type": "string", "enum": ["content", "files_with_matches", "count"]},
+                                "case_insensitive": {"type": "boolean"},
+                                "head_limit": {"type": "integer"},
+                                "context": {"type": "integer"}
+                            },
+                            "required": ["type", "pattern", "path", "glob", "output_mode", "case_insensitive", "head_limit", "context"],
+                            "additionalProperties": False
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "const": "glob"},
+                                "pattern": {"type": "string"},
+                                "path": {"type": "string"},
+                                "head_limit": {"type": "integer"}
+                            },
+                            "required": ["type", "pattern", "path", "head_limit"],
                             "additionalProperties": False
                         },
                         {
@@ -100,7 +128,7 @@ CLI_AGENT_SCHEMA = {
                         {
                             "type": "object",
                             "properties": {
-                                "type": {"type": "string", "enum": ["web", "todo_list", "update_todo", "wait", "milestone", "exit"]},
+                                "type": {"type": "string", "enum": ["web", "todo_list", "update_todo", "wait", "scratchpad", "minion", "exit"]},
                                 "value": {"type": "string"}
                             },
                             "required": ["type", "value"],
@@ -111,6 +139,88 @@ CLI_AGENT_SCHEMA = {
             }
         },
         "required": ["thinking", "current_goal", "memory", "action"],
+        "additionalProperties": False
+    }
+}
+
+# Minion Agent Output Schema — read-only scout sub-agent.
+# Drops write/replace and the value-field actions web/todo_list/update_todo/wait/minion.
+# Allowed: shell, view, grep, glob, scratchpad, exit.
+# Output blocks differ from CLI agent: thinking, memory, next_goal, action.
+MINION_SCHEMA = {
+    "name": "minion_response",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "thinking": {"type": "string"},
+            "memory": {"type": "string"},
+            "next_goal": {"type": "string"},
+            "action": {
+                "type": "array",
+                "items": {
+                    "anyOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "const": "shell"},
+                                "command": {"type": "string"},
+                                "input": {"type": "string"}
+                            },
+                            "required": ["type", "command", "input"],
+                            "additionalProperties": False
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "const": "view"},
+                                "path": {"type": "string"},
+                                "start": {"type": "integer"},
+                                "end": {"type": "integer"}
+                            },
+                            "required": ["type", "path", "start", "end"],
+                            "additionalProperties": False
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "const": "grep"},
+                                "pattern": {"type": "string"},
+                                "path": {"type": "string"},
+                                "glob": {"type": "string"},
+                                "output_mode": {"type": "string", "enum": ["content", "files_with_matches", "count"]},
+                                "case_insensitive": {"type": "boolean"},
+                                "head_limit": {"type": "integer"},
+                                "context": {"type": "integer"}
+                            },
+                            "required": ["type", "pattern", "path", "glob", "output_mode", "case_insensitive", "head_limit", "context"],
+                            "additionalProperties": False
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "const": "glob"},
+                                "pattern": {"type": "string"},
+                                "path": {"type": "string"},
+                                "head_limit": {"type": "integer"}
+                            },
+                            "required": ["type", "pattern", "path", "head_limit"],
+                            "additionalProperties": False
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "enum": ["scratchpad", "exit"]},
+                                "value": {"type": "string"}
+                            },
+                            "required": ["type", "value"],
+                            "additionalProperties": False
+                        }
+                    ]
+                }
+            }
+        },
+        "required": ["thinking", "memory", "next_goal", "action"],
         "additionalProperties": False
     }
 }
@@ -175,7 +285,7 @@ AGENT_OUTPUT_SCHEMA = {
                         {
                             "type": "object",
                             "properties": {
-                                "type": {"type": "string", "enum": ["shortcut_combo", "open_app", "wait", "web", "shell", "cli_agent", "cli_await", "todo_list", "update_todo", "milestone", "done"]},
+                                "type": {"type": "string", "enum": ["shortcut_combo", "open_app", "wait", "web", "shell", "cli_agent", "cli_await", "todo_list", "update_todo", "scratchpad", "done"]},
                                 "value": {"type": "string"}
                             },
                             "required": ["type", "value"],
@@ -193,12 +303,13 @@ AGENT_OUTPUT_SCHEMA = {
 class LLMManager:
     """Manager to route requests to the correct LLM provider"""
     
-    def __init__(self, provider: str, model: str, thinking: bool = True, api_key: str = None, cli_agent: bool = False):
+    def __init__(self, provider: str, model: str, thinking: bool = True, api_key: str = None, cli_agent: bool = False, mode: str = "main"):
         self.provider = provider.lower()
         self.model_short_name = model
         self.thinking = thinking
         self.runtime_api_key = api_key  # Runtime key from frontend (priority)
         self.cli_agent = cli_agent  # Flag for CLI agent (text-only, different schema)
+        self.mode = mode  # "main" | "cli" | "minion" — picks output schema
         
         # CLI agent gets its own hardcoded model per provider (independent from main agent)
         if cli_agent:
@@ -243,8 +354,13 @@ class LLMManager:
         self.display_name = model_info["display_name"]
         self.model_info = model_info  # Store full model info for schema support check
         
-        # Select schema based on agent type
-        self.schema = CLI_AGENT_SCHEMA if cli_agent else AGENT_OUTPUT_SCHEMA
+        # Select schema based on agent type / mode
+        if mode == "minion":
+            self.schema = MINION_SCHEMA
+        elif cli_agent:
+            self.schema = CLI_AGENT_SCHEMA
+        else:
+            self.schema = AGENT_OUTPUT_SCHEMA
         
         self.provider_instance = self._initialize_provider()
         

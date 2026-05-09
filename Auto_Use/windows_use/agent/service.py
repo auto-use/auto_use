@@ -76,7 +76,7 @@ def _cleanup_scratchpad():
 class AgentService:
     """Service for Windows automation agent"""
     
-    def __init__(self, provider: str, model: str, save_conversation: bool = False, thinking: bool = True, frontend_callback=None, text_callback=None, web_callback=None, shell_callback=None, cli_callback=None, api_key: str = None, stop_event=None):
+    def __init__(self, provider: str, model: str, save_conversation: bool = False, thinking: bool = True, frontend_callback=None, text_callback=None, web_callback=None, shell_callback=None, cli_callback=None, api_key: str = None, stop_event=None, external_terminal: bool = False):
         """Initialize the Agent Service"""
         # Clean up scratchpad for a fresh start
         _cleanup_scratchpad()
@@ -103,7 +103,7 @@ class AgentService:
         self.cli_callback = cli_callback
 
         # Initialize Controller with provider and actual API model name (pass api_key for CLI agent subprocess)
-        self.controller = ControllerView(provider=provider, model=self.llm_manager.get_model_name(), web_callback=web_callback, shell_callback=shell_callback, cli_callback=cli_callback, api_key=api_key, stop_event=stop_event)
+        self.controller = ControllerView(provider=provider, model=self.llm_manager.get_model_name(), web_callback=web_callback, shell_callback=shell_callback, cli_callback=cli_callback, api_key=api_key, stop_event=stop_event, external_terminal=external_terminal)
         
         # Initialize Domain Knowledge Service
         self.domain_knowledge = DomainKnowledgeService()
@@ -246,17 +246,17 @@ class AgentService:
             print(f"⚠ Error reading todo file: {str(e)}")
             return ""
     
-    def _read_milestone_from_file(self) -> str:
-        """Read the current milestones from scratchpad/milestone/milestone.md file"""
+    def _read_scratchpad_from_file(self) -> str:
+        """Read the current scratchpad entries from scratchpad/milestone/milestone.md file"""
         try:
-            milestone_file = Path(__file__).parent.parent / "scratchpad" / "milestone" / "milestone.md"
-            if milestone_file.exists():
-                with open(milestone_file, 'r', encoding='utf-8') as f:
+            scratchpad_file = Path(__file__).parent.parent / "scratchpad" / "milestone" / "milestone.md"
+            if scratchpad_file.exists():
+                with open(scratchpad_file, 'r', encoding='utf-8') as f:
                     return f.read().strip()
             else:
                 return ""
         except Exception as e:
-            print(f"⚠ Error reading milestone file: {str(e)}")
+            print(f"⚠ Error reading scratchpad file: {str(e)}")
             return ""
 
     def _remove_action_from_response(self, response_json: str) -> str:
@@ -414,8 +414,8 @@ Respond with "action": [{"type": "shortcut_combo", "value": "alt+y"}] to accept 
                 # Fetch fresh todo from file system
                 todo_list = self._read_todo_from_file()
                 
-                # Fetch fresh milestones from file system
-                milestone_content = self._read_milestone_from_file()
+                # Fetch fresh scratchpad entries from file system
+                scratchpad_content = self._read_scratchpad_from_file()
                 
                 # Check if last_response contains web tool result
                 web_tool_response = ""
@@ -467,7 +467,7 @@ Respond with "action": [{"type": "shortcut_combo", "value": "alt+y"}] to accept 
 {cli_json}
 </cli_agent>
 
-<critical> No image or element tree is provided. Properly understand all CLI output in this iteration.\n 1. In the milestone, clearly mention what has been done so far, the Windows actions you are currently performing, and what is left to complete later. Clearly state where you left off and that the remaining steps will be performed from this point at a later time.\n 2. Plan your next steps accordingly. </critical>
+<critical> No image or element tree is provided. Properly understand all CLI output in this iteration.\n 1. In the scratchpad, clearly mention what has been done so far, the Windows actions you are currently performing, and what is left to complete later. Clearly state where you left off and that the remaining steps will be performed from this point at a later time.\n 2. Plan your next steps accordingly. </critical>
 
 <user_request>
 {task}
@@ -477,16 +477,16 @@ Respond with "action": [{"type": "shortcut_combo", "value": "alt+y"}] to accept 
 {todo_list}
 </todo_list>"""
 
-                    if milestone_content:
+                    if scratchpad_content:
                         user_message += f"""
 
-<milestone_achieved>
-{milestone_content}
-</milestone_achieved>"""
+<scratchpad>
+{scratchpad_content}
+</scratchpad>"""
                     else:
                         user_message += """
 
-<milestone_achieved>none</milestone_achieved>"""
+<scratchpad>none</scratchpad>"""
 
                     self.controller.clear_cli_agent_results()
                     
@@ -499,7 +499,7 @@ Respond with "action": [{"type": "shortcut_combo", "value": "alt+y"}] to accept 
                     user_message = f"""<critical>
 No image and element tree provided. Focus on digesting the web response below.
 1. Analyze thoroughly - extract all relevant data (numbers, dates, names, URLs, prices, etc.)
-2. Save ALL important findings to milestone in this step's action.
+2. Save ALL important findings to scratchpad in this step's action.
 </critical>
 
 {pending_web_response}
@@ -516,16 +516,16 @@ No image and element tree provided. Focus on digesting the web response below.
 {todo_list}
 </todo_list>"""
 
-                    if milestone_content:
+                    if scratchpad_content:
                         user_message += f"""
 
-<milestone_achieved>
-{milestone_content}
-</milestone_achieved>"""
+<scratchpad>
+{scratchpad_content}
+</scratchpad>"""
                     else:
                         user_message += """
 
-<milestone_achieved>none</milestone_achieved>"""
+<scratchpad>none</scratchpad>"""
 
                     image_sent = False
                     annotated_image_base64 = None
@@ -554,17 +554,17 @@ No image and element tree provided. Focus on digesting the web response below.
 {todo_list}
 </todo_list>"""
 
-                    # Always add milestone_achieved tag (with content or "none")
-                    if milestone_content:
+                    # Always add scratchpad tag (with content or "none")
+                    if scratchpad_content:
                         user_message += f"""
 
-<milestone_achieved>
-{milestone_content}
-</milestone_achieved>"""
+<scratchpad>
+{scratchpad_content}
+</scratchpad>"""
                     else:
                         user_message += f"""
 
-<milestone_achieved>none</milestone_achieved>"""
+<scratchpad>none</scratchpad>"""
 
                     # Inject domain knowledge if available
                     if domain_block:

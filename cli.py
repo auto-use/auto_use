@@ -17,24 +17,25 @@
 # A small attribution goes a long way toward a healthy open-source
 # community — thank you for contributing.
 
-#this main.py give terminal interface to the user to interact with the agent for ui refer app.py
+# this cli.py directly starts the CLI agent (skipping the main agent layer).
+# For the full main agent terminal interface refer to main.py, for UI refer to app.py.
 import platform
 
 if platform.system() == "Darwin":
-    from Auto_Use.macOS_use.agent.service import AgentService
+    from Auto_Use.macOS_use.agent.cli import AgentService
 elif platform.system() == "Windows":
-    from Auto_Use.windows_use.agent.service import AgentService
+    from Auto_Use.windows_use.agent.cli import AgentService
 else:
     raise RuntimeError(f"Unsupported OS: {platform.system()}")
 
 # Configuration
 PROVIDER = "openrouter"
-MODEL = "gemini-3.1-pro" #refer to the model name correctly from model_list.txt.
+MODEL = "gemini-3.1-pro"  # refer to the model name correctly from model_list.txt.
+
 # Your task here
 task = """
 
-study the the grep glob approach of macos then syndicate to windowsus use the  directory is desktop/github/Auto use. 
-
+ask minion to check what all things are there in mac download directory.
 """
 
 # Control conversation saving
@@ -42,12 +43,12 @@ conversation = True  # Set to False to disable conversation.txt
 # Control thinking/reasoning
 thinking = True  # Set to True to enable reasoning for supported models
 
-# Run the agent
+# Run the CLI agent directly
 agent = AgentService(
     provider=PROVIDER,
     model=MODEL,
     save_conversation=conversation,
-    external_terminal=True,
+    thinking=thinking,
 )
 agent.process_request(task)
 

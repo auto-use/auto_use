@@ -22,31 +22,35 @@ import logging
 import time
 import sys
 import os
+import shlex
 import threading
 import subprocess
+import uuid
 from pathlib import Path
 
 from .service import ControllerService
 from .task_tracker.service import TaskTrackerService
-from .milestone.service import MilestoneService
+from .scratchpad.service import ScratchpadService
 from .tool import open_app, ShellService, AppleScriptService
 from .key_combo.service import KeyComboService
 from .tool.web.service import WebService
 from .tool.screenshot import ScreenshotService
 from .cli.service import CLIService
 try:
-    from app import debug_log, IS_COMPILED
+    from app import debug_log, IS_COMPILED, app_data_dir
 except ImportError:
     IS_COMPILED = False
     def debug_log(message, level="INFO"):
         pass
+    def app_data_dir():
+        return Path(".")
 
 # Configure logger
 logger = logging.getLogger(__name__)
 
 
 class ControllerView:
-    def __init__(self, provider: str = None, model: str = None, cli_mode: bool = False, session_id: str = None, web_callback=None, shell_callback=None, cli_callback=None, api_key: str = None, stop_event=None):
+    def __init__(self, provider: str = None, model: str = None, cli_mode: bool = False, session_id: str = None, web_callback=None, shell_callback=None, cli_callback=None, api_key: str = None, stop_event=None, external_terminal: bool = False, minion_mode: bool = False):
         """Initialize the Controller View - central router for all actions
 
         Args:
@@ -59,14 +63,20 @@ class ControllerView:
             cli_callback: Optional callback for CLI agent streaming (await_start/task_start/task_line/task_end/await_end)
             api_key: Optional runtime API key for LLM providers (passed to CLI agent)
             stop_event: Optional threading.Event for stopping actions mid-execution
+            external_terminal: If True, dispatched CLI sub-agents are launched in their own visible OS terminal window (Terminal.app on macOS) instead of having their stdout/stderr piped back. Used by main.py headless mode so the user can watch sub-agent progress live.
+            minion_mode: If True, this ControllerView belongs to a minion sub-agent run.
+                The scratchpad redirects to scratchpad/cli_minion/{session_id}/ so
+                the parent CLI agent's cli_milestone/ stays untouched.
         """
         self.cli_mode = cli_mode
         self.session_id = session_id
         self.api_key = api_key
         self.stop_event = stop_event
+        self.external_terminal = external_terminal
+        self.minion_mode = minion_mode
         self.controller_service = ControllerService(stop_event=stop_event)
         self.task_tracker = TaskTrackerService(cli_mode=cli_mode, session_id=session_id)
-        self.milestone_service = MilestoneService(cli_mode=cli_mode, session_id=session_id)
+        self.scratchpad_service = ScratchpadService(cli_mode=cli_mode, session_id=session_id, minion_mode=minion_mode)
         self.key_combo_service = KeyComboService(stop_event=stop_event)
         self.cli_service = CLIService(session_id=session_id) if cli_mode else None
         self.shell_service = ShellService()
@@ -84,9 +94,25 @@ class ControllerView:
         self._cli_completed = []      # Done: [{"task": str, "summary": str, "status": str}]
         self._cli_agent_lock = threading.Lock()
         self._cli_await_active = False  # Whether an await_start has been emitted but not yet matched by await_end
+
+        # Minion tracking — parallel to CLI agent but with implicit-blocking semantics:
+        # the action loop dispatches all minions, then blocks at the end until every
+        # spawned minion has written its result. Reuses _cli_agent_lock for thread safety.
+        self._minion_tasks = []       # Active: [{"query": str, "subprocess": Popen, "result_file": Path, "session_id": str}]
+        self._minion_completed = []   # Done: [{"query": str, "session_id": str, "summary": str, "status": str}]
     
     def _web_loading_animation(self):
-        """Display animated loading indicator for web search"""
+        """Display animated loading indicator for web search.
+
+        Skipped when stdout is NOT a TTY (i.e. piped subprocess) — the `\r`
+        carriage-return overwrite trick only works in a real terminal; in a pipe
+        all the partial writes accumulate and stream into the parent's reader as
+        ugly text like "🌐 Web 🌐 Web. 🌐 Web..." which then floods the pill.
+        In pipe mode the UI gets a clean web-loading visual via the
+        web_loading_start/end events emitted from the web action handler.
+        """
+        if not sys.stdout.isatty():
+            return
         dots = ["", ".", "..", "..."]
         idx = 0
         while not self._stop_loading:
@@ -96,19 +122,69 @@ class ControllerView:
             time.sleep(0.5)
     
     def _safe_cli_emit(self, event_type: str, *args):
-        """Invoke self.cli_callback safely; never let a callback exception bubble up."""
-        if not self.cli_callback:
+        """Invoke self.cli_callback safely; never let a callback exception bubble up.
+
+        Subprocess fallback: when there's no direct callback (CLI agent running as
+        a piped subprocess of the main agent in app.py UI mode) and stdout is NOT
+        a TTY, emit the event as a tagged JSON marker on stdout. The main agent's
+        reader thread picks the marker up and re-emits it through ITS callback so
+        UI events from the CLI subprocess (like minion lifecycle) reach the pill.
+        Skipped in cli.py terminal mode (stdout is a TTY) — keeps the user's
+        terminal output clean of internal protocol lines.
+        """
+        if self.cli_callback:
+            try:
+                self.cli_callback(event_type, *args)
+            except Exception as e:
+                logger.error(f"cli_callback({event_type}) failed: {e}")
             return
+        if self.cli_mode and not sys.stdout.isatty():
+            try:
+                payload = json.dumps({"event": event_type, "args": list(args)}, ensure_ascii=False)
+                sys.stdout.write(f"__MINION_UI_EVENT__:{payload}\n")
+                sys.stdout.flush()
+            except Exception:
+                pass
+
+    def _spawn_cli_external_terminal(self, cli_cmd: list, task_description: str):
+        """Spawn the CLI sub-agent in a new visible Terminal.app window on macOS.
+
+        Uses osascript to open Terminal.app and run the same `cli_cmd` the
+        piped path would run. The user sees the sub-agent's live output in
+        its own window. Completion is still detected via the result-file
+        watcher, so we don't need a Popen handle here. Returns None.
+        """
+        repo_root = os.getcwd()
+        inner = " ".join(shlex.quote(arg) for arg in cli_cmd)
+        shell_line = f"cd {shlex.quote(repo_root)} && {inner}"
+        # Escape for the AppleScript string literal: backslashes then double-quotes.
+        escaped = shell_line.replace("\\", "\\\\").replace('"', '\\"')
+        title = task_description[:60].replace('"', "'")
+        apple_script = (
+            f'tell application "Terminal"\n'
+            f'  activate\n'
+            f'  do script "{escaped}"\n'
+            f'  set custom title of front window to "CLI Agent: {title}"\n'
+            f'end tell'
+        )
         try:
-            self.cli_callback(event_type, *args)
+            subprocess.Popen(["osascript", "-e", apple_script])
+            debug_log(f"CLI sub-agent launched in external Terminal.app window: {task_description[:80]}")
         except Exception as e:
-            logger.error(f"cli_callback({event_type}) failed: {e}")
+            debug_log(f"Failed to spawn external Terminal for CLI sub-agent: {e}", "ERROR")
+        return None
 
     def _read_cli_stream(self, pipe, task_id: str, stream: str):
         """Reader thread: forwards each line from a subprocess pipe to the frontend.
 
         Loops until the pipe closes (subprocess exit). Each line emits a 'task_line'
         event tagged with task_id and stream ("out" or "err").
+
+        Marker lines (`__MINION_UI_EVENT__:<json>`) are intercepted: they're internal
+        protocol from a piped CLI subprocess forwarding minion lifecycle. Re-emit
+        them as proper `minion_start` / `minion_end` events through this controller's
+        own callback (which has the bridge to the frontend). Marker lines never
+        leak into the parent pill's streaming output.
         """
         if pipe is None:
             logger.warning(f"_read_cli_stream({task_id}, {stream}): pipe is None")
@@ -126,6 +202,9 @@ class ControllerView:
                 if line == "" and stream == "err":
                     # don't spam empty stderr lines
                     continue
+                if line.startswith("__MINION_UI_EVENT__:"):
+                    self._handle_minion_marker(line, parent_task_id=task_id)
+                    continue
                 line_count += 1
                 if line_count <= 3 or line_count % 50 == 0:
                     logger.info(f"_read_cli_stream({task_id}, {stream}) line #{line_count}: {line[:120]}")
@@ -138,6 +217,47 @@ class ControllerView:
                 pipe.close()
             except Exception:
                 pass
+
+    def _handle_minion_marker(self, line: str, parent_task_id: str):
+        """Parse a `__MINION_UI_EVENT__:<json>` marker line emitted by a piped CLI
+        subprocess and re-emit it through this controller's own callback as a
+        proper `minion_start` / `minion_end` event.
+
+        `parent_task_id` is the spawning CLI subprocess's task_id (the result-file
+        stem from the cli_agent dispatch) — used so the frontend can attach the
+        new minion pill below the correct parent pill.
+        """
+        try:
+            payload = json.loads(line[len("__MINION_UI_EVENT__:"):].strip())
+        except Exception as e:
+            logger.error(f"Failed to parse minion marker: {e} | line={line!r}")
+            return
+        inner_event = payload.get("event")
+        inner_args = payload.get("args", [])
+        if inner_event == "task_start":
+            minion_task_id = inner_args[0] if len(inner_args) > 0 else ""
+            minion_desc = inner_args[1] if len(inner_args) > 1 else ""
+            if isinstance(minion_desc, str) and minion_desc.startswith("[minion] "):
+                minion_desc = minion_desc[len("[minion] "):]
+            self._safe_cli_emit("minion_start", parent_task_id, minion_task_id, minion_desc)
+        elif inner_event == "task_end":
+            minion_task_id = inner_args[0] if len(inner_args) > 0 else ""
+            status = inner_args[1] if len(inner_args) > 1 else "complete"
+            summary = inner_args[2] if len(inner_args) > 2 else ""
+            self._safe_cli_emit("minion_end", minion_task_id, status, summary)
+        elif inner_event == "task_line":
+            # Minion's stdout/stderr lines — stream into the minion pill body so
+            # the user sees live progress (mirrors how parent CLI pills stream).
+            minion_task_id = inner_args[0] if len(inner_args) > 0 else ""
+            line_text = inner_args[1] if len(inner_args) > 1 else ""
+            line_stream = inner_args[2] if len(inner_args) > 2 else "out"
+            self._safe_cli_emit("minion_line", minion_task_id, line_text, line_stream)
+        elif inner_event == "web_loading_start":
+            # Web tool started inside the piped CLI subprocess — flip the parent
+            # CLI pill into web-loading visual state. parent_task_id IS the pill.
+            self._safe_cli_emit("pill_web_loading_start", parent_task_id)
+        elif inner_event == "web_loading_end":
+            self._safe_cli_emit("pill_web_loading_end", parent_task_id)
 
     def _cli_agent_complete_callback(self, result: dict, result_file: Path):
         """Callback when CLI agent finishes execution"""
@@ -152,13 +272,33 @@ class ControllerView:
             })
             logger.info(f"CLI Agent completed: {result.get('summary', 'No summary')}")
 
-        # Notify frontend that this task ended (before milestone, so the pill flips first)
+        # Notify frontend that this task ended (before scratchpad write, so the pill flips first)
         self._safe_cli_emit("task_end", task_id, result.get("status", "complete"), result.get("summary", ""))
 
-        # Update milestone with completion status
+    def _minion_complete_callback(self, result: dict, result_file: Path, query: str, session_id: str):
+        """Callback when a minion subprocess writes its result file.
+
+        Unlike CLI agents, minion summaries do NOT auto-append to the parent's scratchpad —
+        the structured exit summary is the entire deliverable and surfaces directly as a
+        <minion_completed> tool response on the parent's next iteration.
+        """
+        task_id = result_file.stem
+        with self._cli_agent_lock:
+            self._minion_tasks = [t for t in self._minion_tasks if t["result_file"] != result_file]
+            self._minion_completed.append({
+                "query": query,
+                "session_id": session_id,
+                "summary": result.get("summary", ""),
+                "status": result.get("status", "complete"),
+            })
+            logger.info(f"Minion completed (session {session_id}): {result.get('status', 'complete')}")
+
+        self._safe_cli_emit("task_end", task_id, result.get("status", "complete"), result.get("summary", ""))
+
+        # Update scratchpad with completion status
         cli_task = result.get("task", "Unknown task")
         cli_summary = result.get("summary", "Completed")
-        self.milestone_service.append_milestone(f"CLI Agent finished, task: {cli_task}, status: complete, summary: {cli_summary}")
+        self.scratchpad_service.append_scratchpad(f"CLI Agent finished, task: {cli_task}, status: complete, summary: {cli_summary}")
     
     def get_cli_agent_status(self) -> dict:
         """Get current CLI agent status for main agent to check"""
@@ -378,29 +518,37 @@ class ControllerView:
                 elif action_type == "web":
                     query = action_item.get("value")
                     logger.info(f"Performing web search: {query}")
-                    
+
                     if self.web_callback:
                         self.web_callback("start")
-                    
+                    # In CLI subprocess (no web_callback), this fires the marker bridge
+                    # so the parent CLI pill flips into web-loading visual on the frontend.
+                    self._safe_cli_emit("web_loading_start")
+
                     self._stop_loading = False
                     loading_thread = threading.Thread(target=self._web_loading_animation)
                     loading_thread.daemon = True
                     loading_thread.start()
-                    
+
                     try:
                         web_service = WebService(self.provider, self.model, self.api_key)
                         web_result = web_service.search(query)
                     finally:
                         self._stop_loading = True
                         loading_thread.join(timeout=1)
-                        sys.stdout.write("\r" + " " * 50 + "\r")
-                        sys.stdout.flush()
+                        # Clear the in-place text only in TTY mode — in piped subprocess
+                        # this would just dump 50 spaces + carriage returns into the
+                        # parent's reader buffer.
+                        if sys.stdout.isatty():
+                            sys.stdout.write("\r" + " " * 50 + "\r")
+                            sys.stdout.flush()
 
                         if self.web_callback:
                             self.web_callback("end")
                             # Wait for CSS fade-out to complete before next action
                             time.sleep(0.7)
-                    
+                        self._safe_cli_emit("web_loading_end")
+
                     result = {
                         "status": "success",
                         "action": "tool",
@@ -409,7 +557,7 @@ class ControllerView:
                         "result": web_result
                     }
                     results.append(result)
-                
+
                 elif action_type == "cli_await":
                     # AWAIT MODE: freeze pipeline until all CLI tasks complete
                     reason = action_item.get("value", "")
@@ -457,7 +605,7 @@ class ControllerView:
                     task_description = action_item.get("value", "")
                     logger.info(f"Starting CLI Agent for task: {task_description}")
                     
-                    result_file = Path("cli_agent_result") / f"result_{int(time.time() * 1000)}.json"
+                    result_file = app_data_dir() / "cli_agent_result" / f"result_{int(time.time() * 1000)}.json"
                     result_file.parent.mkdir(parents=True, exist_ok=True)
                     
                     # Build CLI command based on compiled vs dev mode
@@ -489,23 +637,37 @@ class ControllerView:
                     if self.api_key:
                         cli_cmd.extend(["--api_key", self.api_key])
 
-                    # Start subprocess. Force unbuffered stdout/stderr in the
-                    # child so our reader thread sees lines as they're printed
-                    # — without this, Python block-buffers when not connected
-                    # to a TTY and the streaming UI feels frozen.
+                    # Propagate external_terminal to the CLI subprocess. In app.py UI mode
+                    # main agent has external_terminal=False; pass --no_external_terminal so
+                    # the spawned CLI keeps its own minions on PIPE (required for the
+                    # __MINION_UI_EVENT__ marker bridge to reach the frontend).
+                    if not self.external_terminal:
+                        cli_cmd.append("--no_external_terminal")
+
                     cli_env = os.environ.copy()
                     cli_env["PYTHONUNBUFFERED"] = "1"
                     cli_proc = None
-                    try:
-                        cli_proc = subprocess.Popen(
-                            cli_cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            env=cli_env
-                        )
-                        debug_log(f"CLI subprocess started (PID: {cli_proc.pid})")
-                    except Exception as e:
-                        debug_log(f"CLI subprocess failed to start: {e}", "ERROR")
+
+                    if self.external_terminal:
+                        # Headless main.py mode: open Terminal.app so the user
+                        # can watch the sub-agent live. Completion still flows
+                        # through the result-file watcher below.
+                        self._spawn_cli_external_terminal(cli_cmd, task_description)
+                    else:
+                        # Start subprocess. Force unbuffered stdout/stderr in the
+                        # child so our reader thread sees lines as they're printed
+                        # — without this, Python block-buffers when not connected
+                        # to a TTY and the streaming UI feels frozen.
+                        try:
+                            cli_proc = subprocess.Popen(
+                                cli_cmd,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                env=cli_env
+                            )
+                            debug_log(f"CLI subprocess started (PID: {cli_proc.pid})")
+                        except Exception as e:
+                            debug_log(f"CLI subprocess failed to start: {e}", "ERROR")
 
                     # Track in active list
                     task_id = result_file.stem
@@ -549,8 +711,8 @@ class ControllerView:
                     watcher_thread.daemon = True
                     watcher_thread.start()
                     
-                    self.milestone_service.append_milestone(f"CLI Agent started, task: {task_description}, status: pending")
-                    
+                    self.scratchpad_service.append_scratchpad(f"CLI Agent started, task: {task_description}, status: pending")
+
                     result = {
                         "status": "success",
                         "action": "tool",
@@ -559,7 +721,108 @@ class ControllerView:
                         "message": "CLI Agent started in parallel. Continue with other tasks."
                     }
                     results.append(result)
-                    
+
+                elif action_type == "minion":
+                    # DISPATCH MODE: spawn a read-only minion sub-agent.
+                    # Multiple minions in one action_list spawn in parallel; the
+                    # implicit-await block at the end of this action loop blocks
+                    # until ALL spawned minions have written their result file.
+                    minion_query = action_item.get("value", "")
+                    logger.info(f"Starting Minion for query: {minion_query}")
+
+                    result_file = app_data_dir() / "cli_minion_result" / f"result_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}.json"
+                    result_file.parent.mkdir(parents=True, exist_ok=True)
+                    minion_session_id = uuid.uuid4().hex[:8]
+
+                    if IS_COMPILED:
+                        exe_dir = os.path.dirname(sys.executable)
+                        if sys.platform == "darwin":
+                            main_exe = os.path.join(exe_dir, "AutoUse")
+                        else:
+                            main_exe = os.path.join(exe_dir, "AutoUse.exe")
+                        cli_cmd = [
+                            main_exe, "--minion-mode",
+                            "--task", minion_query,
+                            "--provider", self.provider or "openrouter",
+                            "--model", self.model or "gemini-3-flash",
+                            "--result", str(result_file),
+                        ]
+                    else:
+                        cli_cmd = [
+                            sys.executable, "-m", "Auto_Use.macOS_use.agent.cli.minions",
+                            "--task", minion_query,
+                            "--provider", self.provider or "openrouter",
+                            "--model", self.model or "gemini-3-flash",
+                            "--result", str(result_file),
+                        ]
+
+                    if self.api_key:
+                        cli_cmd.extend(["--api_key", self.api_key])
+
+                    cli_env = os.environ.copy()
+                    cli_env["PYTHONUNBUFFERED"] = "1"
+                    minion_proc = None
+
+                    if self.external_terminal:
+                        self._spawn_cli_external_terminal(cli_cmd, f"[minion] {minion_query}")
+                    else:
+                        try:
+                            minion_proc = subprocess.Popen(
+                                cli_cmd,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                env=cli_env,
+                            )
+                            debug_log(f"Minion subprocess started (PID: {minion_proc.pid})")
+                        except Exception as e:
+                            debug_log(f"Minion subprocess failed to start: {e}", "ERROR")
+
+                    task_id = result_file.stem
+                    with self._cli_agent_lock:
+                        self._minion_tasks.append({
+                            "query": minion_query,
+                            "subprocess": minion_proc,
+                            "result_file": result_file,
+                            "session_id": minion_session_id,
+                        })
+
+                    self._safe_cli_emit("task_start", task_id, f"[minion] {minion_query}")
+                    if minion_proc is not None:
+                        for pipe, stream_name in (
+                            (minion_proc.stdout, "out"),
+                            (minion_proc.stderr, "err"),
+                        ):
+                            t = threading.Thread(
+                                target=self._read_cli_stream,
+                                args=(pipe, task_id, stream_name),
+                                daemon=True,
+                            )
+                            t.start()
+
+                    def watch_minion_result(rf=result_file, q=minion_query, sid=minion_session_id):
+                        while True:
+                            if rf.exists():
+                                try:
+                                    with open(rf, 'r', encoding='utf-8') as f:
+                                        result_data = json.load(f)
+                                    rf.unlink()
+                                    self._minion_complete_callback(result_data, rf, q, sid)
+                                except Exception as e:
+                                    logger.error(f"Error reading minion result: {e}")
+                                break
+                            time.sleep(1)
+
+                    watcher_thread = threading.Thread(target=watch_minion_result)
+                    watcher_thread.daemon = True
+                    watcher_thread.start()
+
+                    # Placeholder — patched after the implicit-await at end of action loop.
+                    results.append({
+                        "_pending_minion": True,
+                        "query": minion_query,
+                        "session_id": minion_session_id,
+                    })
+
                 elif action_type == "todo_list":
                     todo_value = action_item.get("value")
                     self.task_tracker.save_todo(todo_value)
@@ -579,17 +842,17 @@ class ControllerView:
                             "message": "Could not update task"
                         }
                 
-                elif action_type == "milestone":
-                    milestone_value = action_item.get("value")
-                    success = self.milestone_service.append_milestone(milestone_value)
+                elif action_type == "scratchpad":
+                    scratchpad_value = action_item.get("value")
+                    success = self.scratchpad_service.append_scratchpad(scratchpad_value)
                     if success:
-                        result = {"status": "success", "action": "milestone_added", "milestone": milestone_value}
+                        result = {"status": "success", "action": "scratchpad_added", "scratchpad": scratchpad_value}
                         results.append(result)
                     else:
                         return {
                             "status": "error",
-                            "action": "milestone_failed",
-                            "message": "Could not add milestone"
+                            "action": "scratchpad_failed",
+                            "message": "Could not add scratchpad entry"
                         }
                         
                 elif action_type == "applescript":
@@ -674,8 +937,11 @@ class ControllerView:
                 
                 elif action_type == "view":
                     if self.cli_service:
-                        path = action_item.get("path", "")
-                        result = self.cli_service.view(path)
+                        result = self.cli_service.view(
+                            path=action_item.get("path", ""),
+                            start=action_item.get("start", 0),
+                            end=action_item.get("end", 0),
+                        )
                         results.append(result)
                     else:
                         return {
@@ -683,7 +949,41 @@ class ControllerView:
                             "action": "view",
                             "message": "CLI service not initialized (cli_mode=False)"
                         }
-                
+
+                elif action_type == "grep":
+                    if self.cli_service:
+                        result = self.cli_service.grep(
+                            pattern=action_item.get("pattern", ""),
+                            path=action_item.get("path", ""),
+                            glob_filter=action_item.get("glob", ""),
+                            output_mode=action_item.get("output_mode", "content"),
+                            case_insensitive=action_item.get("case_insensitive", False),
+                            head_limit=action_item.get("head_limit", 50),
+                            context=action_item.get("context", 0),
+                        )
+                        results.append(result)
+                    else:
+                        return {
+                            "status": "error",
+                            "action": "grep",
+                            "message": "CLI service not initialized (cli_mode=False)"
+                        }
+
+                elif action_type == "glob":
+                    if self.cli_service:
+                        result = self.cli_service.glob(
+                            pattern=action_item.get("pattern", ""),
+                            path=action_item.get("path", ""),
+                            head_limit=action_item.get("head_limit", 100),
+                        )
+                        results.append(result)
+                    else:
+                        return {
+                            "status": "error",
+                            "action": "glob",
+                            "message": "CLI service not initialized (cli_mode=False)"
+                        }
+
                 elif action_type == "write":
                     if self.cli_service:
                         path = action_item.get("path", "")
@@ -722,7 +1022,55 @@ class ControllerView:
                 if results and results[-1].get("status") == "stopped":
                     self.controller_service.release_all_inputs()
                     return results[-1]
-            
+
+            # Implicit await: if any minions were dispatched in this action, block
+            # until all of them have written their result files, then patch each
+            # placeholder in `results` with the structured tool response. Single
+            # minion → wait for that one. N minions → wait for all N (parallel).
+            with self._cli_agent_lock:
+                pending_minion_count = len(self._minion_tasks)
+            if pending_minion_count > 0:
+                while True:
+                    if self.stop_event is not None and self.stop_event.is_set():
+                        with self._cli_agent_lock:
+                            for t in self._minion_tasks:
+                                proc = t.get("subprocess")
+                                if proc and proc.poll() is None:
+                                    try:
+                                        proc.terminate()
+                                    except Exception:
+                                        pass
+                            self._minion_tasks.clear()
+                        break
+                    with self._cli_agent_lock:
+                        if not self._minion_tasks:
+                            break
+                    time.sleep(0.5)
+
+                with self._cli_agent_lock:
+                    completed_by_sid = {c["session_id"]: c for c in self._minion_completed}
+                for i, r in enumerate(results):
+                    if isinstance(r, dict) and r.get("_pending_minion"):
+                        sid = r.get("session_id")
+                        completion = completed_by_sid.get(sid)
+                        if completion is None:
+                            results[i] = {
+                                "status": "error",
+                                "action": "minion_completed",
+                                "query": r.get("query", ""),
+                                "output": "Minion did not return a result (subprocess crashed or was terminated).",
+                            }
+                        else:
+                            results[i] = {
+                                "status": "success" if completion.get("status") == "complete" else "error",
+                                "action": "minion_completed",
+                                "query": r.get("query", ""),
+                                "output": completion.get("summary", ""),
+                            }
+                with self._cli_agent_lock:
+                    self._minion_completed = [c for c in self._minion_completed
+                                              if c["session_id"] not in completed_by_sid]
+
             if len(results) == 0:
                 return {"status": "error", "message": "No valid action found"}
             elif len(results) == 1:
@@ -799,15 +1147,56 @@ class ControllerView:
             
             elif action_key == "view":
                 if self.cli_service:
-                    path = action_value.get("path", "") if isinstance(action_value, dict) else action_value
-                    return self.cli_service.view(path)
+                    if isinstance(action_value, dict):
+                        return self.cli_service.view(
+                            path=action_value.get("path", ""),
+                            start=action_value.get("start", 0),
+                            end=action_value.get("end", 0),
+                        )
+                    return self.cli_service.view(action_value)
                 else:
                     return {
                         "status": "error",
                         "action": "view",
                         "message": "CLI service not initialized (cli_mode=False)"
                     }
-            
+
+            elif action_key == "grep":
+                if self.cli_service:
+                    if isinstance(action_value, dict):
+                        return self.cli_service.grep(
+                            pattern=action_value.get("pattern", ""),
+                            path=action_value.get("path", ""),
+                            glob_filter=action_value.get("glob", ""),
+                            output_mode=action_value.get("output_mode", "content"),
+                            case_insensitive=action_value.get("case_insensitive", False),
+                            head_limit=action_value.get("head_limit", 50),
+                            context=action_value.get("context", 0),
+                        )
+                    return self.cli_service.grep(pattern=str(action_value))
+                else:
+                    return {
+                        "status": "error",
+                        "action": "grep",
+                        "message": "CLI service not initialized (cli_mode=False)"
+                    }
+
+            elif action_key == "glob":
+                if self.cli_service:
+                    if isinstance(action_value, dict):
+                        return self.cli_service.glob(
+                            pattern=action_value.get("pattern", ""),
+                            path=action_value.get("path", ""),
+                            head_limit=action_value.get("head_limit", 100),
+                        )
+                    return self.cli_service.glob(pattern=str(action_value))
+                else:
+                    return {
+                        "status": "error",
+                        "action": "glob",
+                        "message": "CLI service not initialized (cli_mode=False)"
+                    }
+
             elif action_key == "write":
                 if self.cli_service:
                     path = action_value.get("path", "")
@@ -838,26 +1227,29 @@ class ControllerView:
             elif action_key == "web":
                 query = action_value
                 logger.info(f"Performing web search: {query}")
-                
+
                 if self.web_callback:
                     self.web_callback("start")
-                
+                self._safe_cli_emit("web_loading_start")
+
                 self._stop_loading = False
                 loading_thread = threading.Thread(target=self._web_loading_animation)
                 loading_thread.daemon = True
                 loading_thread.start()
-                
+
                 try:
                     web_service = WebService(self.provider, self.model, self.api_key)
                     web_result = web_service.search(query)
                 finally:
                     self._stop_loading = True
                     loading_thread.join(timeout=1)
-                    sys.stdout.write("\r" + " " * 50 + "\r")
-                    sys.stdout.flush()
+                    if sys.stdout.isatty():
+                        sys.stdout.write("\r" + " " * 50 + "\r")
+                        sys.stdout.flush()
 
                     if self.web_callback:
                         self.web_callback("end")
+                    self._safe_cli_emit("web_loading_end")
 
                 return {
                     "status": "success",
@@ -882,15 +1274,15 @@ class ControllerView:
                         "message": "Could not update task"
                     }
             
-            elif action_key == "milestone":
-                success = self.milestone_service.append_milestone(action_value)
+            elif action_key == "scratchpad":
+                success = self.scratchpad_service.append_scratchpad(action_value)
                 if success:
-                    return {"status": "success", "action": "milestone_added", "milestone": action_value}
+                    return {"status": "success", "action": "scratchpad_added", "scratchpad": action_value}
                 else:
                     return {
                         "status": "error",
-                        "action": "milestone_failed",
-                        "message": "Could not add milestone"
+                        "action": "scratchpad_failed",
+                        "message": "Could not add scratchpad entry"
                     }
 
             elif action_key == "exit":

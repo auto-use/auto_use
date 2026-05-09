@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 # service.py -> telegram -> remote_connection -> windows_use -> Auto_Use / api_key / api_key.txt
 API_KEY_FILE = Path(__file__).parent.parent.parent.parent / "api_key" / "api_key.txt"
-MILESTONE_PATH = Path(__file__).parent.parent / "scratchpad" / "milestone" / "milestone.md"
+SCRATCHPAD_PATH = Path(__file__).parent.parent / "scratchpad" / "milestone" / "milestone.md"
 
 PROVIDER_KEY_MAP = {
     'openrouter': 'OPENROUTER_API_KEY',
@@ -114,13 +114,13 @@ class TelegramAgentBot:
 
     # ── helpers ───────────────────────────────────────────────────────────
 
-    def _monitor_milestones(self, chat_id: int, loop, bot, stop_event: threading.Event):
-        """Poll milestone.md every 5s and send new lines to the Telegram chat."""
+    def _monitor_scratchpad(self, chat_id: int, loop, bot, stop_event: threading.Event):
+        """Poll the scratchpad file every 5s and send new lines to the Telegram chat."""
         last_pos = 0
         while not stop_event.is_set():
-            if MILESTONE_PATH.exists():
+            if SCRATCHPAD_PATH.exists():
                 try:
-                    with open(MILESTONE_PATH, 'r', encoding='utf-8') as f:
+                    with open(SCRATCHPAD_PATH, 'r', encoding='utf-8') as f:
                         f.seek(last_pos)
                         new_content = f.read()
                         if new_content:
@@ -134,13 +134,13 @@ class TelegramAgentBot:
                                             bot.send_message(chat_id=chat_id, text=chunk), loop
                                         )
                 except Exception as exc:
-                    logger.warning("Milestone read error: %s", exc)
+                    logger.warning("Scratchpad read error: %s", exc)
             stop_event.wait(5)
 
         # Final sweep
-        if MILESTONE_PATH.exists():
+        if SCRATCHPAD_PATH.exists():
             try:
-                with open(MILESTONE_PATH, 'r', encoding='utf-8') as f:
+                with open(SCRATCHPAD_PATH, 'r', encoding='utf-8') as f:
                     f.seek(last_pos)
                     new_content = f.read()
                     if new_content:
@@ -167,7 +167,7 @@ class TelegramAgentBot:
             )
 
             monitor = threading.Thread(
-                target=self._monitor_milestones,
+                target=self._monitor_scratchpad,
                 args=(chat_id, loop, bot, self._stop_event),
                 daemon=True,
             )

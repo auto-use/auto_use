@@ -17,7 +17,6 @@
 # A small attribution goes a long way toward a healthy open-source
 # community — thank you for contributing.
 
-# This file makes note a Python package
-from .service import MilestoneService
+from .service import ScratchpadService
 
-__all__ = ['MilestoneService']
+__all__ = ['ScratchpadService']

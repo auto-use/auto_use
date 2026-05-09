@@ -3,7 +3,7 @@ This is additional domain knowledge to work efficiently (use it wisely).
 *Microsoft services often expose fewer elements; be ready to use `shortcut_combo` and `canvas_input`.*
 
 1. Excel Online:
-   - If you use `web` to collect data, store the final numbers/answers in `milestone` (so you don't re-search).
+   - If you use `web` to collect data, store the final numbers/answers in `scratchpad` (so you don't re-search).
    - Sheets is mostly canvas-heavy, so use `shortcut_combo` and `canvas_input` often.
    - Table entry (row-by-row, horizontal):
      - Fill each row in one go (cell1 -> tab -> cell2 -> tab ...), then move to the next row.

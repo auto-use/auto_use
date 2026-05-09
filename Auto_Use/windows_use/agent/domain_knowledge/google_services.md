@@ -33,7 +33,7 @@ This is additional domain knowledge to work efficiently (use it wisely).
       2. Input: Fill row using `tab` traversal.
       3. Format: `[{"type": "canvas_input", "text": "<col1>"}, {"type": "shortcut_combo", "value": "tab"}, {"type": "canvas_input", "text": "<col2>"}]`
     - Next Row: Jump to specific start cell of next row via `Name Box` + `Enter`.
-    - State: Store web-collected data in `milestone` (do not re-search). Track entry row progress in `memory`.
+    - State: Store web-collected data in `scratchpad` (do not re-search). Track entry row progress in `memory`.
   - Editing & Reading:
     - Assess: Use `<os_vision>` to identify layout.
     - Edit: Jump to cell -> `canvas_input` (auto-overwrites).

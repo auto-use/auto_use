@@ -23,6 +23,6 @@
 from .view import ControllerView
 from .service import ControllerService
 from .task_tracker import TaskTrackerService
-from .milestone import MilestoneService
+from .scratchpad import ScratchpadService
 
-__all__ = ['ControllerView', 'ControllerService', 'TaskTrackerService', 'MilestoneService']
+__all__ = ['ControllerView', 'ControllerService', 'TaskTrackerService', 'ScratchpadService']

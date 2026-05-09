@@ -97,7 +97,8 @@ class AgentService:
     
     def __init__(self, provider: str, model: str, save_conversation: bool = False,
                  thinking: bool = True, api_key: str = None, stop_event=None,
-                 task: str = None, on_complete: callable = None):
+                 task: str = None, on_complete: callable = None,
+                 external_terminal: bool = True):
 
         self.provider = provider
         self.model = model
@@ -105,6 +106,10 @@ class AgentService:
         self.stop_event = stop_event
         self.task = task  # Task description (for tracking when called as service)
         self.on_complete = on_complete  # Callback when CLI agent exits
+        # When True, sub-spawns (minions) get their own visible cmd console.
+        # Default True so cli.py and main.py terminal flows show every sub-agent live;
+        # app.py / UI mode can pass False to keep them hidden.
+        self.external_terminal = external_terminal
 
         # Generate unique session ID for complete isolation
         self.session_id = uuid.uuid4().hex[:8]
@@ -118,8 +123,15 @@ class AgentService:
             cli_agent=True
         )
 
-        # Initialize Controller with cli_mode and session_id for complete isolation
-        self.controller = ControllerView(provider=provider, model=model, cli_mode=True, session_id=self.session_id, api_key=api_key)
+        # Initialize Controller with cli_mode + session_id for isolation, and propagate
+        # external_terminal so spawned minions (via the `minion` action) inherit the
+        # same "give each sub-agent its own visible console" behavior.
+        self.controller = ControllerView(
+            provider=provider, model=model,
+            cli_mode=True, session_id=self.session_id,
+            api_key=api_key,
+            external_terminal=external_terminal,
+        )
 
         # Load system prompt
         self.system_prompt = self._load_system_prompt()
@@ -184,7 +196,7 @@ class AgentService:
         """Load system prompt from file"""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         prompt_path = os.path.join(current_dir, "system_prompt.md")
-        
+
         with open(prompt_path, 'r', encoding='utf-8') as f:
             return f.read()
     
@@ -455,7 +467,27 @@ output:
 {action_result.get("output", "")}
 </view>
 </Tool_response>"""
-                
+
+                elif action_result.get("action") == "grep":
+                    last_response = f"""<Tool_response>
+<grep>
+command: {action_result.get("command", "")}
+status: {action_result.get("status", "")}
+output:
+{action_result.get("output", "")}
+</grep>
+</Tool_response>"""
+
+                elif action_result.get("action") == "glob":
+                    last_response = f"""<Tool_response>
+<glob>
+command: {action_result.get("command", "")}
+status: {action_result.get("status", "")}
+output:
+{action_result.get("output", "")}
+</glob>
+</Tool_response>"""
+
                 elif action_result.get("action") == "replace":
                     last_response = f"""<Tool_response>
 <replace>
@@ -490,6 +522,20 @@ status: {result.get("status", "")}
 output:
 {result.get("output", "")}
 </view>""")
+                        elif result.get("action") == "grep":
+                            formatted_results.append(f"""<grep>
+command: {result.get("command", "")}
+status: {result.get("status", "")}
+output:
+{result.get("output", "")}
+</grep>""")
+                        elif result.get("action") == "glob":
+                            formatted_results.append(f"""<glob>
+command: {result.get("command", "")}
+status: {result.get("status", "")}
+output:
+{result.get("output", "")}
+</glob>""")
                         elif result.get("action") == "write":
                             formatted_results.append(f"""<write>
 command: {result.get("command", "")}
@@ -506,10 +552,17 @@ output: {result.get("output", "")}
                             formatted_results.append(f"""<todo_updated>
 task: {result.get("task", "")}
 </todo_updated>""")
-                        elif result.get("action") == "milestone_added":
-                            formatted_results.append(f"""<milestone_added>
-milestone: {result.get("milestone", "")}
-</milestone_added>""")
+                        elif result.get("action") == "scratchpad_added":
+                            formatted_results.append(f"""<scratchpad_added>
+scratchpad: {result.get("scratchpad", "")}
+</scratchpad_added>""")
+                        elif result.get("action") == "minion_completed":
+                            formatted_results.append(f"""<minion_completed>
+status: {result.get("status", "")}
+query: {result.get("query", "")}
+output:
+{result.get("output", "")}
+</minion_completed>""")
                         else:
                             # For other actions, simple format
                             action_name = result.get("action", "result")
