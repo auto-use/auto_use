@@ -16,17 +16,6 @@
 
 ---
 
-<div align="center">
-
-<video controls autoplay loop muted playsinline preload="metadata" width="720">
-  <source src="https://raw.githubusercontent.com/FunctionFreak/Auto-Use/developer_branch/demo.mp4" type="video/mp4">
-  Your browser can't render embedded video — <a href="https://github.com/FunctionFreak/Auto-Use/raw/developer_branch/demo.mp4">click to download / watch the demo</a>.
-</video>
-
-</div>
-
----
-
 ## ✨ Features
 
 - **GUI automation via hybrid Accessibility + Vision** — Quartz screen capture annotated with the macOS Accessibility tree, then handed to a multimodal LLM. Not pure pixel-guessing, not pure DOM-walking — both at once.
@@ -82,6 +71,10 @@ python -m Auto_Use.macOS_use.agent.cli --task "refactor the auth module"
 python -m Auto_Use.macOS_use.agent.cli.minions --task "where is _validate_token defined and who calls it?"
 ```
 
+<div align="center">
+  <img src="demo/coder.gif" alt="CLI Agent coding in the terminal" width="720"/>
+</div>
+
 ---
 
 ## 🔬 How GUI Control Works
@@ -93,6 +86,10 @@ Most "AI controls your screen" projects pick one approach. Auto Use uses three, 
 3. **Vision-model dispatch** — the annotated screenshot (JPEG-compressed, base64-encoded) plus the element tree are sent to the active multimodal LLM (Claude, GPT-4o, Gemini, …). The agent references targets by their overlay index, not by raw pixel coordinates.
 
 **Why hybrid?** Pure-vision agents hallucinate coordinates and miss off-screen state. Pure-accessibility agents miss everything that lives in a canvas or video. Auto Use shows the model both, refreshed after every action, so it always reasons over current ground truth.
+
+<div align="center">
+  <img src="demo/gui_action.gif" alt="Auto Use uninstalling VLC media player via GUI automation" width="720"/>
+</div>
 
 ---
 
@@ -119,13 +116,23 @@ Shell access is wrapped in a `Sandbox` that the model can't escape by accident.
 
 ---
 
+## 🌐 Web Search
+
+Live web search built into the agent loop — no manual copy-paste between browser and chat. Backed by Perplexity Sonar (or any Perplexity / OpenAI / Anthropic web-search-capable model when selected), the agent issues queries, reads results, and folds the findings straight into its next action.
+
+<div align="center">
+  <img src="demo/web_search.gif" alt="Auto Use answering 'Why is AMD stock price going up?' via live web search" width="720"/>
+</div>
+
+---
+
 ## 🎯 Example Tasks
 
 Just describe what you want — Auto Use picks the right tool for the job.
 
 ### 🖥️ GUI Task
 ```
-"Open Chrome, go to YouTube, and search for Python tutorials"
+"Uninstall VLC media player"
 ```
 
 ### 👨‍💻 Coding Task
@@ -135,12 +142,8 @@ Just describe what you want — Auto Use picks the right tool for the job.
 
 ### 🌐 Web Search Task
 ```
-"Find the latest NVIDIA stock price and quarterly revenue"
+"Why is AMD stock price going up?"
 ```
-
-<div align="center">
-  <img src="demo/web_search.gif" alt="Auto Use performing a web search task" width="720"/>
-</div>
 
 ### 💻 CLI Task
 ```
