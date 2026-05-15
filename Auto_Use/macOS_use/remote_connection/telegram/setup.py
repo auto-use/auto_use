@@ -7,6 +7,7 @@ banner.wait_for_next() — the user does the actual login (phone, country,
 OTP) themselves; we just get them to the right page.
 """
 import logging
+import os
 import time
 
 from Auto_Use.macOS_use.controller.tool.open_app import open_app
@@ -14,6 +15,9 @@ from Auto_Use.macOS_use.tree.element import UIElementScanner, ELEMENT_CONFIG
 from Auto_Use.macOS_use.controller.service import ControllerService
 from Auto_Use.macOS_use.controller.key_combo.service import KeyComboService
 from Auto_Use.macOS_use.remote_connection.telegram.banner import StatusBanner
+from Auto_Use.macOS_use.remote_connection.telegram.service import (
+    _API_KEY_FILE, _set_key_in_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +43,10 @@ def _open_telegram_in_safari(banner) -> bool:
     if not open_app("Safari"):
         logger.error("setup.py: failed to launch Safari")
         return False
-    time.sleep(STEP_DELAY_SEC)
+    # open_app itself sleeps ~1 s after launching and then runs an AppleScript
+    # window-move, so the address bar isn't reliably there yet. One more
+    # second is enough for the smart-search field to settle before we scan.
+    time.sleep(1)
 
     scanner = UIElementScanner(ELEMENT_CONFIG)
     scanner.scan_elements()
@@ -90,8 +97,39 @@ def run(country_code: str = "", phone: str = "") -> bool:
         banner.update("Please log in to Telegram, then click Next")
         banner.wait_for_next()
 
-        banner.update("Done")
-        time.sleep(STEP_DELAY_SEC)
-        return True
+        banner.update(
+            "Now search for @BotFather in Telegram and open the chat. "
+            "Click Next when you're there."
+        )
+        banner.wait_for_next()
+
+        banner.update("How do you want to set up the bot?")
+        choice = banner.wait_for_choice("Fresh setup", "Token already generated")
+
+        if choice == "left":
+            banner.update(
+                "In @BotFather, send these one at a time:  /newbot  →  AutoUse  →  "
+                "a unique bot name. BotFather will reply with your token. "
+                "Click Next when you have it."
+            )
+            banner.wait_for_next()
+
+        banner.update("Paste your BotFather token below and click Save.")
+        token = banner.wait_for_input(save_label="Save")
+        if not token:
+            return False  # Cocoa-unavailable fallback; banner never appeared
+
+        _set_key_in_file(_API_KEY_FILE, "TELEGRAM_BOT_TOKEN", token.strip())
+
+        banner.update("Saved. Restarting AutoUse to start the bot…")
+        # Give the message time to stream out + a beat for the user to read
+        # it, then hard-exit the whole process. The user's next `python
+        # app.py` boot picks up the fresh TELEGRAM_BOT_TOKEN and the bot
+        # comes online with the saved owner chat. os._exit skips atexit /
+        # finally cleanup, which is what we want — Cocoa will tear down
+        # the banner + windows as the process dies.
+        time.sleep(3)
+        banner.close()
+        os._exit(0)
     finally:
         banner.close()

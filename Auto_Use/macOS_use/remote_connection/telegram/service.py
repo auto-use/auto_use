@@ -510,14 +510,29 @@ async def callback_handler(update, ctx):
 
 # ── scratchpad streaming ─────────────────────────────────────────────────────
 
-def _send_chat(bot, chat_id, text, loop):
+def _send_chat(bot, chat_id, text, loop, wait: bool = False, timeout: float = 5.0):
     """Schedule a bot.send_message on the asyncio loop from a worker thread.
     Silently ignores failures so a transient send error never kills the
-    monitor thread."""
+    monitor thread.
+
+    When wait=True, block the calling thread until the send actually
+    completes (or `timeout` seconds elapse). Used for terminal messages
+    like "✅ Done." that must land in the chat BEFORE the next message
+    is scheduled — without it, the "Done" send and the "Running queued
+    task" send race inside the asyncio loop as two parallel HTTP POSTs
+    and Telegram can deliver them out of order."""
     try:
-        asyncio.run_coroutine_threadsafe(
+        fut = asyncio.run_coroutine_threadsafe(
             bot.send_message(chat_id=chat_id, text=text), loop
         )
+        if wait:
+            try:
+                fut.result(timeout=timeout)
+            except Exception:
+                logger.warning(
+                    "send_message to chat %s did not confirm within %ss",
+                    chat_id, timeout, exc_info=True,
+                )
     except Exception:
         logger.warning("Failed to schedule send_message to chat %s", chat_id)
 
@@ -535,8 +550,21 @@ def _monitor_scratchpad(chat_id, bot, loop, stop_event, start_pos):
     def _read_and_forward():
         nonlocal last_pos
         if not SCRATCHPAD_PATH.exists():
+            # File was deleted (e.g. AgentService.__init__ wiping the
+            # scratchpad). Reset so the next poll re-reads the whole new
+            # file from the top instead of seeking past its end.
+            last_pos = 0
             return
         try:
+            # Defensive: if the file shrank below last_pos it was truncated
+            # or rotated; restart from byte 0 so we don't slice into the
+            # middle of fresh content and stream a fragment.
+            try:
+                current_size = SCRATCHPAD_PATH.stat().st_size
+                if current_size < last_pos:
+                    last_pos = 0
+            except Exception:
+                pass
             with open(SCRATCHPAD_PATH, "r", encoding="utf-8", errors="replace") as f:
                 f.seek(last_pos)
                 new_content = f.read()
@@ -591,9 +619,21 @@ def _run_agent(task, provider, model, chat_id, bot, loop):
     except Exception:
         logger.warning("could not minimise AutoUse window", exc_info=True)
 
-    # Snapshot the scratchpad size NOW so the monitor only forwards new lines
-    # for THIS task, not anything left over from previous runs.
-    start_pos = SCRATCHPAD_PATH.stat().st_size if SCRATCHPAD_PATH.exists() else 0
+    # Reset the milestone scratchpad to empty before starting the monitor.
+    # AgentService.__init__ wipes the entire scratchpad/ directory in
+    # _cleanup_scratchpad() — so if we snapshotted the file's current size
+    # here and the agent then deleted + rewrote it, the monitor's last_pos
+    # would point mid-way into the fresh content and we'd stream a
+    # fragment (e.g. "ome." instead of "Verified: …Chrome.") to the chat.
+    # Deleting the file ourselves up front and starting from byte 0 keeps
+    # the monitor aligned with whatever the agent writes next. Best-effort
+    # — a failure here just degrades us back to the old (buggy) behavior.
+    try:
+        if SCRATCHPAD_PATH.exists():
+            SCRATCHPAD_PATH.unlink()
+    except Exception:
+        logger.warning("could not reset milestone scratchpad", exc_info=True)
+    start_pos = 0
     stop_event = threading.Event()
     monitor = threading.Thread(
         target=_monitor_scratchpad,
@@ -619,12 +659,16 @@ def _run_agent(task, provider, model, chat_id, bot, loop):
         # sweep happens first — keeps the chat in correct chronological order.
         stop_event.set()
         monitor.join(timeout=SCRATCHPAD_POLL_SEC + 2)
-        _send_chat(bot, chat_id, "✅ Done.", loop)
+        # wait=True: block until "✅ Done." is on Telegram's servers before
+        # the finally-block fires _maybe_run_next_queued, which would
+        # otherwise schedule "📝 Running queued task: …" as a second,
+        # concurrent HTTP POST that can race past Done in delivery.
+        _send_chat(bot, chat_id, "✅ Done.", loop, wait=True)
     except Exception as e:
         logger.exception("agent error")
         stop_event.set()
         monitor.join(timeout=SCRATCHPAD_POLL_SEC + 2)
-        _send_chat(bot, chat_id, f"❌ Error: {e}", loop)
+        _send_chat(bot, chat_id, f"❌ Error: {e}", loop, wait=True)
     finally:
         if not stop_event.is_set():
             stop_event.set()
