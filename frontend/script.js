@@ -621,13 +621,26 @@ document.addEventListener('DOMContentLoaded', () => {
             fetch('/api/telegram/status')
                 .then(res => res.json())
                 .then(data => {
-                    if (data.connected && data.bot_username) {
-                        remoteSetup.style.display = 'none';
-                        remoteConnected.style.display = 'flex';
-                        remoteBotName.textContent = '@' + data.bot_username;
+                    // Always keep the Telegram service button visible and
+                    // expandable. When already paired, just grey out the
+                    // Connect button inside the form rather than swapping
+                    // to a different panel.
+                    remoteSetup.style.display = 'flex';
+                    if (remoteConnected) remoteConnected.style.display = 'none';
+
+                    if (data.connected) {
+                        if (remoteConnectBtn) {
+                            remoteConnectBtn.disabled = true;
+                            remoteConnectBtn.textContent = data.bot_username
+                                ? '✓ Already paired (@' + data.bot_username + ')'
+                                : '✓ Already paired';
+                        }
+                        if (remoteInstructions) remoteInstructions.style.display = 'none';
                     } else {
-                        remoteSetup.style.display = 'flex';
-                        remoteConnected.style.display = 'none';
+                        if (remoteConnectBtn) {
+                            remoteConnectBtn.disabled = false;
+                            remoteConnectBtn.textContent = 'Connect';
+                        }
                         if (remoteTelegramForm) remoteTelegramForm.style.display = 'none';
                         if (remoteInstructions) remoteInstructions.style.display = 'none';
                     }

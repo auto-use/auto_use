@@ -561,22 +561,6 @@ def delete_api_key():
         debug_exception("delete_api_key")
         return jsonify({'error': 'Failed to delete'}), 500
 
-@app.route('/api/telegram/connect', methods=['POST'])
-def telegram_connect():
-    """Kick off the guided Telegram pairing flow.
-
-    Returns immediately; the real work (banner + Safari navigation + manual
-    login) runs in a background thread because it blocks on user clicks for
-    minutes. The banner is the source of truth for live status.
-    """
-    try:
-        from Auto_Use.macOS_use.remote_connection.telegram.setup import run as run_telegram_setup
-        threading.Thread(target=run_telegram_setup, daemon=True).start()
-        return jsonify({'status': 'started'})
-    except Exception as e:
-        debug_exception('telegram_connect')
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
 @app.route('/api/vertex/status', methods=['GET'])
 def get_vertex_status():
     """Return current Vertex AI config (project_id and location)"""
@@ -884,6 +868,20 @@ def start_server():
     host = '0.0.0.0' if IS_WINDOWS else '127.0.0.1'
     app.run(host=host, port=5000, debug=False, use_reloader=False)
 
+def minimize_main_window():
+    """Minimise the AutoUse pywebview window. No-op if the window isn't up yet
+    (e.g. someone calls this before main() has created it) or pywebview's
+    minimise call fails for any reason. Safe to call from any thread —
+    pywebview routes the call to its own UI loop internally."""
+    win = globals().get('webview_window')
+    if win is None:
+        return
+    try:
+        win.minimize()
+    except Exception:
+        debug_exception("minimize_main_window")
+
+
 def _compute_window_center(win_w, win_h):
     """Return (x, y) to center a (win_w, win_h) window on the main display.
     Falls back to a sensible default if the native APIs are unavailable."""
@@ -915,7 +913,9 @@ def _compute_window_center(win_w, win_h):
     return 600, 30
 
 def main():
-    # Register Telegram blueprint on Windows (macOS doesn't ship it yet).
+    # Wire the Telegram remote-control bot. Windows mounts a Flask blueprint
+    # plus a polling bot; macOS just starts the polling bot (no blueprint yet —
+    # token is read from .env / api_key.txt directly).
     if IS_WINDOWS:
         try:
             from Auto_Use.windows_use.remote_connection.telegram.view import telegram_bp, start_bot
@@ -923,6 +923,17 @@ def main():
             start_bot()
         except Exception:
             debug_exception("telegram_blueprint_init")
+    elif IS_MAC:
+        try:
+            from Auto_Use.macOS_use.remote_connection.telegram.view import telegram_bp
+            from Auto_Use.macOS_use.remote_connection.telegram.service import start_bot as start_telegram_bot
+            app.register_blueprint(telegram_bp)
+            start_telegram_bot()
+        except Exception as _tg_e:
+            import traceback as _tg_tb
+            print(f"[telegram] IMPORT/INIT FAILED: {_tg_e!r}", file=sys.stderr, flush=True)
+            _tg_tb.print_exc(file=sys.stderr)
+            debug_exception("telegram_bot_init")
 
     if "--cli-mode" in sys.argv:
         # CLI mode - delegate to the platform-specific CLI agent

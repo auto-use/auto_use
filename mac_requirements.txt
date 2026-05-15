@@ -27,6 +27,9 @@ mss
 flask
 psutil
 
+# Remote Connection (Telegram bot)
+python-telegram-bot
+
 # Build Tools (Nuitka binary compilation)
 nuitka
 ordered-set

@@ -170,6 +170,103 @@ body { display: flex; align-items: center; gap: 8px; padding: 6px 10px; box-sizi
 """
 
 
+# Compact HTML — used when StatusBanner(compact=True). Just the orb in a tiny
+# circular pill, no message span, no Next button, no JS message handlers. The
+# centred PC monitor icon cross-fades with a Telegram paper-plane every ~5s
+# so the user can tell at a glance this is a Telegram-triggered task.
+COMPACT_HTML = """
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent;
+  overflow: hidden; }
+body { display: flex; align-items: center; justify-content: center; }
+
+.orb-wrap { position: relative; width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center; }
+
+.stop-circle-1 {
+  width: 36px; height: 36px; border-radius: 50%; position: absolute; background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  animation: stop-pulse 4.2s ease-in-out infinite 0.3s; z-index: 1;
+}
+.stop-circle-1::before, .stop-circle-1::after {
+  content: ""; position: absolute; border-radius: 50%; filter: blur(7px); width: 30%; height: 30%;
+}
+.stop-circle-1::before { background: #ff0073; top: 30%; right: 30%; }
+.stop-circle-1::after  { background: #00baff; bottom: 10%; left: 30%; }
+.stop-circle-2 {
+  width: 28px; height: 28px; border-radius: 50%; position: absolute; inset: 0; margin: auto;
+  background-color: white; z-index: 9;
+  animation: stop-pulse2 4.2s ease-in-out infinite;
+}
+.stop-circle-2::before, .stop-circle-2::after {
+  content: ""; position: absolute; border-radius: 50%; filter: blur(5px); z-index: 1;
+}
+.stop-circle-2::before { background: #ff0073; width: 30%; height: 30%; top: 20%; right: 20%; }
+.stop-circle-2::after  { background: #00bbff; width: 20%; height: 20%; bottom: 10%; left: 40%; }
+.stop-bg {
+  position: absolute; inset: 0; border-radius: 50%;
+  box-shadow: inset 0 0 5px 2px rgba(255,255,255,0.8), 0 0 2px 2px rgba(255,255,255,0.9);
+  background-color: #9292d8; animation: stop-bgRotate 2.5s linear infinite;
+}
+.stop-bg::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  animation: stop-bgColor 4s linear infinite;
+  box-shadow: inset 0 0 5px 2px rgba(255,255,255,0.8); opacity: 0.2;
+}
+
+/* Both icons stacked at the same spot; opposing keyframes cross-fade them. */
+.icon-stack {
+  position: absolute; inset: 0; margin: auto; width: 28px; height: 28px; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+}
+.icon-layer {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; box-sizing: border-box;
+  /* Force each layer onto its own GPU compositor layer up-front so the
+     opacity cross-fade doesn't trigger a one-frame promotion artifact (the
+     "small square" flash). */
+  will-change: opacity;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.icon-pc { animation: icon-cycle-pc 10s ease-in-out infinite; }
+.icon-tg { animation: icon-cycle-tg 10s ease-in-out infinite; color: white; }
+
+.stop-monitor { width: 11px; height: 9px; background: transparent; border-radius: 1px; padding: 0;
+  border: 1px solid white; box-sizing: border-box; }
+.stop-screen { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; gap: 2px; }
+.stop-eye { width: 1.5px; height: 2.5px; border-radius: 1px; background: white; animation: stop-blink 4s infinite; }
+.stop-base { width: 14px; height: 1px; background: white; border-radius: 0.5px; }
+
+@keyframes stop-pulse  { 0%{transform:scale(.97)} 15%{transform:scale(1)} 30%{transform:scale(.98)} 45%{transform:scale(1)} 60%{transform:scale(.97)} 85%{transform:scale(1)} 100%{transform:scale(.97)} }
+@keyframes stop-pulse2 { 0%{transform:scale(1)} 15%{transform:scale(1.03)} 30%{transform:scale(.98)} 45%{transform:scale(1.04)} 60%{transform:scale(.97)} 85%{transform:scale(1.03)} 100%{transform:scale(1)} }
+@keyframes stop-bgRotate { 0%{transform:rotate(0)} 20%{transform:rotate(90deg)} 40%{transform:rotate(180deg) scale(.95,1)} 60%,100%{transform:rotate(360deg)} }
+@keyframes stop-bgColor  { 20%{background-color:red} 40%{background-color:#5eff7e} 60%{background-color:#2cb5ff} 80%{background-color:#fc63ff} }
+@keyframes stop-blink    { 0%,85%,100%{transform:scaleY(1)} 92%{transform:scaleY(.1)} }
+@keyframes icon-cycle-pc { 0%, 40% { opacity: 1 } 50%, 90% { opacity: 0 } 100% { opacity: 1 } }
+@keyframes icon-cycle-tg { 0%, 40% { opacity: 0 } 50%, 90% { opacity: 1 } 100% { opacity: 0 } }
+</style></head>
+<body>
+<div class="orb-wrap">
+  <div class="stop-circle-1"></div>
+  <div class="stop-circle-2"><div class="stop-bg"></div></div>
+  <div class="icon-stack">
+    <div class="icon-layer icon-pc">
+      <div class="stop-monitor"><div class="stop-screen"><div class="stop-eye"></div><div class="stop-eye"></div></div></div>
+      <div class="stop-base"></div>
+    </div>
+    <div class="icon-layer icon-tg">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M21.5 4.5L2.5 12l5.5 2 2 6 3-3.5 5.5 4 3-16zM10 14l8.5-7L11 14.5l-1 4.5L10 14z"/></svg>
+    </div>
+  </div>
+</div>
+</body></html>
+"""
+
+
 if _COCOA_OK:
     class _NextHandler(NSObject):
         """WKScriptMessageHandler — fires self._event when JS posts to 'next_clicked'.
@@ -204,14 +301,20 @@ else:
 
 class StatusBanner:
     W, MIN_H, MAX_H, TOP_MARGIN, RIGHT_MARGIN = 440, 44, 200, 56, 20
+    # Compact variant: just the orb, no msg / button / scripts. Fixed-size
+    # circular pill (W == H, radius == W/2). Used for "Telegram task running"
+    # indicator — pure visual, click-through. Sized to hug the 36 px orb with
+    # ~4 px breathing room — anything taller and the pill looks padded.
+    COMPACT_W = COMPACT_H = 44
 
-    def __init__(self):
+    def __init__(self, compact: bool = False):
+        self._compact = compact
         self._window = None
         self._webview = None
         self._next_handler = None    # strong refs so the JS-bridge handlers
         self._height_handler = None  # don't get GC'd
         self._next_event = threading.Event()
-        self._current_h = self.MIN_H
+        self._current_h = self.COMPACT_H if compact else self.MIN_H
 
     # ---- public API (callable from any thread) ----
 
@@ -221,7 +324,9 @@ class StatusBanner:
         callAfter(self._create)
 
     def update(self, text):
-        if not _COCOA_OK:
+        # Compact pills have no msg span — silently no-op so callers don't
+        # have to branch.
+        if not _COCOA_OK or self._compact:
             return
         callAfter(self._set_text, text)
 
@@ -234,6 +339,10 @@ class StatusBanner:
         """
         if not _COCOA_OK:
             return True  # no banner → don't block forever
+        if self._compact:
+            # No Next button in compact mode — return immediately so callers
+            # that accidentally chain it don't hang forever.
+            return True
         callAfter(self._set_next_visible, True)
         self._next_event.clear()
         clicked = self._next_event.wait(timeout)
@@ -250,9 +359,19 @@ class StatusBanner:
     def _create(self):
         try:
             scr = NSScreen.mainScreen().frame()
-            x = scr.size.width - self.W - self.RIGHT_MARGIN
-            y = scr.size.height - self.MIN_H - self.TOP_MARGIN
-            rect = NSMakeRect(x, y, self.W, self.MIN_H)
+            if self._compact:
+                w_px, h_px = self.COMPACT_W, self.COMPACT_H
+                corner = w_px / 2.0
+                html = COMPACT_HTML
+                ignores_mouse = True  # click-through; purely visual
+            else:
+                w_px, h_px = self.W, self.MIN_H
+                corner = self.MIN_H / 2.0
+                html = BANNER_HTML
+                ignores_mouse = False
+            x = scr.size.width - w_px - self.RIGHT_MARGIN
+            y = scr.size.height - h_px - self.TOP_MARGIN
+            rect = NSMakeRect(x, y, w_px, h_px)
 
             w = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
                 rect, NSWindowStyleMaskBorderless, NSBackingStoreBuffered, False
@@ -260,7 +379,7 @@ class StatusBanner:
             w.setLevel_(NSStatusWindowLevel)
             w.setOpaque_(False)
             w.setBackgroundColor_(NSColor.clearColor())
-            w.setIgnoresMouseEvents_(False)
+            w.setIgnoresMouseEvents_(ignores_mouse)
             w.setHasShadow_(True)
             w.setReleasedWhenClosed_(False)
 
@@ -271,22 +390,27 @@ class StatusBanner:
             )
             # Fixed at MIN_H/2 so the pill stays a stadium at default height
             # and becomes a rounded-rectangle when the height grows to fit
-            # multi-line messages — cleaner than a fat oval.
-            content.layer().setCornerRadius_(self.MIN_H / 2.0)
+            # multi-line messages — cleaner than a fat oval. In compact mode
+            # we use W/2 → perfect circle.
+            content.layer().setCornerRadius_(corner)
             content.layer().setMasksToBounds_(True)
 
             cfg = WKWebViewConfiguration.alloc().init()
 
-            # Register both JS→Python bridges BEFORE the WebView is created.
-            nh = _NextHandler.alloc().init()
-            nh._event = self._next_event
-            cfg.userContentController().addScriptMessageHandler_name_(nh, "next_clicked")
+            # JS→Python bridges only relevant in standard mode (compact pill
+            # has no Next button and a fixed size — no need for either handler).
+            if not self._compact:
+                nh = _NextHandler.alloc().init()
+                nh._event = self._next_event
+                cfg.userContentController().addScriptMessageHandler_name_(nh, "next_clicked")
 
-            hh = _HeightHandler.alloc().init()
-            hh._banner = self
-            cfg.userContentController().addScriptMessageHandler_name_(hh, "height_changed")
+                hh = _HeightHandler.alloc().init()
+                hh._banner = self
+                cfg.userContentController().addScriptMessageHandler_name_(hh, "height_changed")
+            else:
+                nh = hh = None
 
-            wv_rect = NSMakeRect(0, 0, self.W, self.MIN_H)
+            wv_rect = NSMakeRect(0, 0, w_px, h_px)
             wv = WKWebView.alloc().initWithFrame_configuration_(wv_rect, cfg)
             try:
                 wv.setValue_forKey_(False, "drawsBackground")
@@ -297,13 +421,13 @@ class StatusBanner:
                 wv.layer().setBackgroundColor_(NSColor.clearColor().CGColor())
             except Exception:
                 pass
-            wv.loadHTMLString_baseURL_(BANNER_HTML, None)
+            wv.loadHTMLString_baseURL_(html, None)
             content.addSubview_(wv)
 
             w.orderFrontRegardless()
             self._window, self._webview = w, wv
             self._next_handler, self._height_handler = nh, hh
-            self._current_h = self.MIN_H
+            self._current_h = h_px
         except Exception as e:
             logger.warning(f"banner: _create failed ({e})")
 
