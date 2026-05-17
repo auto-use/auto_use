@@ -26,6 +26,7 @@ keyboard
 mss
 flask==3.1.2
 psutil
+python-telegram-bot>=20.0
 
 #ocr
 winrt-runtime
@@ -35,3 +36,6 @@ winrt-Windows.Media.Ocr
 winrt-Windows.Globalization
 winrt-Windows.Graphics.Imaging
 winrt-Windows.Storage.Streams
+
+# Build / Packaging
+nuitka
