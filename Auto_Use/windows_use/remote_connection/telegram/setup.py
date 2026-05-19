@@ -149,7 +149,8 @@ def run(country_code: str = "", phone: str = "") -> bool:
     banner.show()
     try:
         banner.update("Let's get you set up with Telegram. Please click Next.")
-        banner.wait_for_next()
+        if not banner.wait_for_next():
+            return False
 
         if not _open_telegram_in_edge(banner):
             banner.update("Failed to open Telegram. Close this banner and try again.")
@@ -157,13 +158,15 @@ def run(country_code: str = "", phone: str = "") -> bool:
             return False
 
         banner.update("Please log in to Telegram, then click Next")
-        banner.wait_for_next()
+        if not banner.wait_for_next():
+            return False
 
         banner.update(
             "Now search for @BotFather in Telegram and open the chat. "
             "Click Next when you're there."
         )
-        banner.wait_for_next()
+        if not banner.wait_for_next():
+            return False
 
         banner.update("How do you want to set up the bot?")
         choice = banner.wait_for_choice("Fresh setup", "Token already generated")
@@ -174,7 +177,8 @@ def run(country_code: str = "", phone: str = "") -> bool:
                 "a unique bot name. BotFather will reply with your token. "
                 "Click Next when you have it."
             )
-            banner.wait_for_next()
+            if not banner.wait_for_next():
+                return False
 
         banner.update("Paste your BotFather token below and click Save.")
         token = banner.wait_for_input(save_label="Save")

@@ -22,8 +22,8 @@ The same module is invoked two ways:
 
   1. **Imported** from setup.py / service.py — exposes the
      `StatusBanner` class that drives the wizard. Side-effect-free:
-     pywebview and tkinter are NOT imported at module load, only
-     inside `_run_subprocess_banner` which the parent never calls.
+     pywebview is NOT imported at module load, only inside
+     `_run_subprocess_banner` which the parent never calls.
 
   2. **Run as `python -m …banner`** (spawned by `StatusBanner.show()`
      via `subprocess.Popen`) — falls through `if __name__ == "__main__"`
@@ -47,16 +47,28 @@ Wire protocol (one JSON message per line):
   ← stdout  {"event": "READY"|"NEXT"|"CHOICE"|"SAVE"|"CLOSED", ...}
 """
 import ctypes
+import datetime
 import json
 import logging
+import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
 from queue import Queue, Empty
 
 logger = logging.getLogger(__name__)
+
+# True when this module is running inside the Nuitka-compiled AutoUse.exe
+# (i.e. sys.executable is the exe, not a Python interpreter). In that case
+# `python -m …banner` is meaningless — the binary has no -m loader — so
+# StatusBanner.show() must re-exec AutoUse.exe with --banner-mode, which
+# app.py's main() picks up and routes to _run_subprocess_banner() directly.
+# Mirrors the detection in app.py:71 and the same pattern already used for
+# --minion-mode in Auto_Use/windows_use/controller/view.py:697.
+_IS_COMPILED = getattr(sys, "frozen", False) or "__compiled__" in globals()
 
 
 # ── Pill geometry ─────────────────────────────────────────────────────────
@@ -100,6 +112,25 @@ def _emit(event: str, **kwargs) -> None:
         payload = {"event": event, **kwargs}
         sys.stdout.write(json.dumps(payload) + "\n")
         sys.stdout.flush()
+    except Exception:
+        pass
+
+
+# File-based event log for the subprocess. Lives at
+# %LOCALAPPDATA%\AutoUse\banner_debug.log so it survives whatever happens
+# to the subprocess's stdio. We log subprocess start, on_shown, events.closing,
+# events.closed, exceptions, and webview.start() return — enough to point at
+# the exact proximate cause if the pill ever vanishes mid-flow again. Best
+# effort: any failure to write is swallowed.
+def _log(msg: str) -> None:
+    try:
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        path = os.path.join(base, "AutoUse", "banner_debug.log")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(
+                f"[{datetime.datetime.now().isoformat()}] pid={os.getpid()} {msg}\n"
+            )
     except Exception:
         pass
 
@@ -580,53 +611,73 @@ COMPACT_HTML = r"""<!DOCTYPE html>
 # ── JS↔Python bridge (subprocess-side only) ──────────────────────────────
 
 
-class _Api:
-    """Exposed to JS as window.pywebview.api.<method>."""
+# Hard cap on pill height so a freakishly long message can't push it
+# into a wall-of-text rectangle. Matches the macOS banner's MAX_H.
+_MAX_PILL_HEIGHT = 200
 
-    # Hard cap on pill height so a freakishly long message can't push it
-    # into a wall-of-text rectangle. Matches the macOS banner's MAX_H.
-    _MAX_PILL_HEIGHT = 200
+
+class _BannerState:
+    """Mutable state shared between the resize-handler and the rest of
+    the subprocess body.
+
+    Deliberately NOT used as `js_api` — see _make_js_handlers."""
 
     def __init__(self, title: str, width: int, min_h: int, compact: bool):
         self.window = None
-        self._title = title
-        self._w = width
-        self._min_h = min_h
-        self._compact = compact
-        self._last_h = min_h
+        self.title = title
+        self.width = width
+        self.min_h = min_h
+        self.compact = compact
+        self.last_h = min_h
 
-    def next_clicked(self, _value=None):
+
+def _make_js_handlers(state: _BannerState):
+    """Return JS-exposed handlers as a 4-tuple of plain local functions.
+
+    We register these via `window.expose(*funcs)` instead of the old
+    `js_api=_Api(...)` pattern because pywebview's util.py:get_functions
+    filters attributes via `inspect.ismethod(attr)` — which returns
+    False for bound methods of Nuitka-compiled classes. In the
+    compiled binary that silently drops every method on _Api, so the
+    JS-side `window.pywebview.api.next_clicked()` resolves to nothing
+    and clicks become no-ops. `window.expose()` stores functions
+    directly in `window._functions`, which the dispatcher checks
+    BEFORE falling back to js_api reflection."""
+
+    def next_clicked(_value=None):
         _emit("NEXT")
         return None
 
-    def choice_clicked(self, value=None):
+    def choice_clicked(value=None):
         _emit("CHOICE", value=str(value) if value is not None else "left")
         return None
 
-    def save_clicked(self, value=None):
+    def save_clicked(value=None):
         _emit("SAVE", value=value.strip() if isinstance(value, str) else "")
         return None
 
-    def height_changed(self, h=0):
+    def height_changed(h=0):
         """Resize the window to fit the reported body height, then
         re-clip the (possibly taller) window into a stadium so the end
         caps follow the new height. No-op for the compact pill which
         has no scrollable content and a constant 80×80 size."""
-        if self._compact or self.window is None:
+        if state.compact or state.window is None:
             return None
         try:
-            target = max(self._min_h, min(self._MAX_PILL_HEIGHT, int(h)))
-            if target == self._last_h:
+            target = max(state.min_h, min(_MAX_PILL_HEIGHT, int(h)))
+            if target == state.last_h:
                 return None
-            self._last_h = target
-            self.window.resize(self._w, target)
+            state.last_h = target
+            state.window.resize(state.width, target)
             # SetWindowRgn's saved region is anchored to the OLD height,
             # so without re-clipping the bottom of the now-taller window
             # would render as a hard rectangle below the pill ends.
-            _apply_rounded_region(self._title)
+            _apply_rounded_region(state.title)
         except Exception:
             pass
         return None
+
+    return next_clicked, choice_clicked, save_clicked, height_changed
 
 
 # ── stdin reader thread (subprocess-side only) ───────────────────────────
@@ -636,138 +687,206 @@ def _stdin_reader(window) -> None:
     """Loop reading JSON commands from stdin and dispatching to the window.
 
     Runs on its own thread so we don't block the pywebview GUI thread."""
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            msg = json.loads(line)
-        except Exception:
-            continue
-        cmd = msg.get("cmd")
-        try:
-            if cmd == "MSG":
-                esc = _js_escape(msg.get("text", ""))
-                window.evaluate_js(f"if(window.setMsg) setMsg('{esc}');")
-            elif cmd == "SHOW_NEXT":
-                window.evaluate_js("if(window.showNext) showNext();")
-            elif cmd == "HIDE_NEXT":
-                window.evaluate_js("if(window.hideNext) hideNext();")
-            elif cmd == "SHOW_CHOICE":
-                left = _js_escape(msg.get("left", ""))
-                right = _js_escape(msg.get("right", ""))
-                window.evaluate_js(
-                    f"if(window.setChoice) setChoice('{left}', '{right}');"
+    _log("stdin_reader: thread started")
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+            except Exception:
+                _log(f"stdin_reader: skip unparseable line {line!r}")
+                continue
+            cmd = msg.get("cmd")
+            _log(f"stdin_reader: cmd={cmd!r}")
+            try:
+                if cmd == "MSG":
+                    esc = _js_escape(msg.get("text", ""))
+                    window.evaluate_js(f"if(window.setMsg) setMsg('{esc}');")
+                elif cmd == "SHOW_NEXT":
+                    window.evaluate_js("if(window.showNext) showNext();")
+                elif cmd == "HIDE_NEXT":
+                    window.evaluate_js("if(window.hideNext) hideNext();")
+                elif cmd == "SHOW_CHOICE":
+                    left = _js_escape(msg.get("left", ""))
+                    right = _js_escape(msg.get("right", ""))
+                    window.evaluate_js(
+                        f"if(window.setChoice) setChoice('{left}', '{right}');"
+                    )
+                elif cmd == "SHOW_INPUT":
+                    label = _js_escape(msg.get("label", "Save"))
+                    window.evaluate_js(
+                        f"if(window.setInput) setInput('{label}');"
+                    )
+                elif cmd == "CLEAR":
+                    window.evaluate_js("if(window.clearAll) clearAll();")
+                elif cmd == "CLOSE":
+                    _log("stdin_reader: CLOSE received, destroying window")
+                    try:
+                        window.destroy()
+                    except Exception:
+                        import traceback
+                        _log(
+                            "stdin_reader: window.destroy() raised:\n"
+                            + traceback.format_exc()
+                        )
+                    return
+            except Exception:
+                # Window may have been destroyed mid-flight — log and
+                # keep the reader alive so the process exits cleanly.
+                import traceback
+                _log(
+                    f"stdin_reader: cmd={cmd!r} dispatch raised:\n"
+                    + traceback.format_exc()
                 )
-            elif cmd == "SHOW_INPUT":
-                label = _js_escape(msg.get("label", "Save"))
-                window.evaluate_js(
-                    f"if(window.setInput) setInput('{label}');"
-                )
-            elif cmd == "CLEAR":
-                window.evaluate_js("if(window.clearAll) clearAll();")
-            elif cmd == "CLOSE":
-                try:
-                    window.destroy()
-                except Exception:
-                    pass
-                return
-        except Exception:
-            # Window may have been destroyed mid-flight — swallow so the
-            # reader thread doesn't crash and the process exits cleanly.
-            pass
+    except Exception:
+        import traceback
+        _log("stdin_reader: outer loop raised:\n" + traceback.format_exc())
+    _log("stdin_reader: thread exiting (stdin EOF or pipe break)")
 
 
 # ── subprocess entry point ────────────────────────────────────────────────
 
 
 def _run_subprocess_banner() -> None:
-    """Subprocess body. Imports webview + tkinter lazily so the parent
-    (which only uses StatusBanner) doesn't pay their startup cost when
-    it imports this module.
+    """Subprocess body. Imports webview lazily so the parent (which only
+    uses StatusBanner) doesn't pay its startup cost when it imports this
+    module.
 
     Mirrors `banner_test.py` byte-for-byte except for the JSON-stdio
     protocol that lets the parent drive the wizard state machine."""
-    import webview
-    import tkinter as tk
-
-    compact = "--compact" in sys.argv[1:]
-
-    # tkinter is run from a fresh process so its screen-width report is
-    # the standard DPI-virtualised value — no pywebview has touched our
-    # DPI awareness yet.
+    _log(f"subprocess start (sys.executable={sys.executable!r})")
+    # Top-level guard: any exception escaping the GUI setup or webview.start()
+    # must land in the debug log — otherwise the user sees the pill flash and
+    # vanish with nothing to point at. Each step is also wrapped individually
+    # so we know exactly which one died.
     try:
-        r = tk.Tk()
-        r.withdraw()
-        screen_w = r.winfo_screenwidth()
-        r.destroy()
+        import webview
+        _log("webview imported")
+
+        compact = "--compact" in sys.argv[1:]
+
+        # Primary-screen width via Win32. GetSystemMetrics(SM_CXSCREEN=0)
+        # returns the DPI-virtualised value in this freshly spawned,
+        # still-DPI-unaware subprocess — identical to what tkinter's
+        # winfo_screenwidth() returned before, without dragging the
+        # tcl/tk runtime into the Nuitka binary (tkinter is listed in
+        # nofollow_third_party in windows_binary_build.py:533 and is
+        # therefore not bundled in the compiled exe).
+        try:
+            screen_w = ctypes.windll.user32.GetSystemMetrics(0) or 1920
+        except Exception:
+            screen_w = 1920
+
+        w = COMPACT_SIZE if compact else PILL_WIDTH
+        h = COMPACT_SIZE if compact else PILL_HEIGHT
+        x = max(0, screen_w - w - SCREEN_MARGIN)
+        y = SCREEN_MARGIN
+        html = COMPACT_HTML if compact else BANNER_HTML
+        title = f"AutoUseBanner_{uuid.uuid4().hex[:8]}"
+        state = _BannerState(title=title, width=w, min_h=h, compact=compact)
+        next_clicked, choice_clicked, save_clicked, height_changed = (
+            _make_js_handlers(state)
+        )
+
+        # No js_api here — methods on a Nuitka-compiled class fail pywebview's
+        # `inspect.ismethod` filter and never get exposed to JS. We register
+        # the handlers via window.expose() below instead.
+        window = webview.create_window(
+            title,
+            html=html,
+            width=w,
+            height=h,
+            min_size=(w, h),
+            x=x,
+            y=y,
+            frameless=True,
+            on_top=True,
+            easy_drag=True,
+            resizable=False,
+        )
+        state.window = window
+        window.expose(next_clicked, choice_clicked, save_clicked, height_changed)
+        _log("window created and handlers exposed")
+
+        def _on_shown():
+            _log("on_shown: entered")
+            # Compact mode: WinForms stretches our small create_window
+            # request to its OS-imposed minimum width (~132+ logical px),
+            # producing a wide pill instead of the tight circle we want.
+            # A programmatic window.resize() AFTER the form is alive
+            # bypasses that minimum — Form.Size setter doesn't go through
+            # the SM_CXMINTRACK clamp the way the initial size does. We
+            # then re-clip the (now smaller, square) window into a circle.
+            if compact:
+                try:
+                    window.resize(COMPACT_SIZE, COMPACT_SIZE)
+                    # Give WinForms one frame to actually realise the new
+                    # rect before _apply_rounded_region reads it — without
+                    # this the region clip runs against the old wide-pill
+                    # geometry and we lose the circle shape.
+                    time.sleep(0.1)
+                except Exception:
+                    pass
+            # Clip into a pill (or circle, in compact mode) and emit READY
+            # so the parent's show() unblocks.
+            _apply_rounded_region(title)
+            # Compact indicator is purely visual — drop mouse input so the
+            # user can click the desktop or any window underneath it. Only
+            # applied to compact mode; the standard wizard pill needs
+            # Next / Save / choice clicks to land.
+            if compact:
+                _make_click_through(title)
+            _log("on_shown: about to emit READY")
+            _emit("READY")
+            _log("on_shown: READY emitted")
+            # Spawn the stdin reader once the window is up.
+            threading.Thread(
+                target=_stdin_reader, args=(window,), daemon=True
+            ).start()
+            _log("on_shown: stdin reader thread spawned, exiting handler")
+
+        window.events.shown += _on_shown
+
+        # Lifecycle observability: log if the window starts closing or has been
+        # closed by anything other than our own CLOSE command. `events.closing`
+        # handlers must return a truthy value to allow the close; the tuple-idiom
+        # logs first and then yields True.
+        window.events.closing += lambda: (_log("event: closing"), True)[1]
+        window.events.closed += lambda: _log("event: closed")
+
+        # Give the subprocess's WebView2 environment its own UserDataFolder.
+        # pywebview's default is %APPDATA%\pywebview ([winforms.py:704]) — shared
+        # process-wide. In the compiled exe the parent (main AutoUse window) and
+        # this subprocess are both AutoUse.exe and would otherwise contend on the
+        # same folder, which can cause WebView2 to tear down our renderer process
+        # seconds into operation. A per-PID temp folder is invisible to dev mode
+        # (each python interpreter already has its own folder) and isolates the
+        # banner subprocess cleanly in the binary build.
+        storage_path = os.path.join(
+            tempfile.gettempdir(), f"autouse_banner_{os.getpid()}"
+        )
+        _log(f"webview.start(storage_path={storage_path!r})")
+
+        # webview.start() runs the GUI loop in this subprocess's main thread.
+        # Blocks until window.destroy() — which the CLOSE command triggers.
+        try:
+            webview.start(storage_path=storage_path)
+            _log("webview.start() returned normally")
+        except Exception:
+            import traceback
+            _log("webview.start() raised:\n" + traceback.format_exc())
+            raise
+
+        _emit("CLOSED")
+        _log("subprocess exit (CLOSED emitted)")
     except Exception:
-        screen_w = 1920
-
-    w = COMPACT_SIZE if compact else PILL_WIDTH
-    h = COMPACT_SIZE if compact else PILL_HEIGHT
-    x = max(0, screen_w - w - SCREEN_MARGIN)
-    y = SCREEN_MARGIN
-    html = COMPACT_HTML if compact else BANNER_HTML
-    title = f"AutoUseBanner_{uuid.uuid4().hex[:8]}"
-    api = _Api(title=title, width=w, min_h=h, compact=compact)
-
-    window = webview.create_window(
-        title,
-        html=html,
-        js_api=api,
-        width=w,
-        height=h,
-        min_size=(w, h),
-        x=x,
-        y=y,
-        frameless=True,
-        on_top=True,
-        easy_drag=True,
-        resizable=False,
-    )
-    api.window = window
-
-    def _on_shown():
-        # Compact mode: WinForms stretches our small create_window
-        # request to its OS-imposed minimum width (~132+ logical px),
-        # producing a wide pill instead of the tight circle we want.
-        # A programmatic window.resize() AFTER the form is alive
-        # bypasses that minimum — Form.Size setter doesn't go through
-        # the SM_CXMINTRACK clamp the way the initial size does. We
-        # then re-clip the (now smaller, square) window into a circle.
-        if compact:
-            try:
-                window.resize(COMPACT_SIZE, COMPACT_SIZE)
-                # Give WinForms one frame to actually realise the new
-                # rect before _apply_rounded_region reads it — without
-                # this the region clip runs against the old wide-pill
-                # geometry and we lose the circle shape.
-                time.sleep(0.1)
-            except Exception:
-                pass
-        # Clip into a pill (or circle, in compact mode) and emit READY
-        # so the parent's show() unblocks.
-        _apply_rounded_region(title)
-        # Compact indicator is purely visual — drop mouse input so the
-        # user can click the desktop or any window underneath it. Only
-        # applied to compact mode; the standard wizard pill needs
-        # Next / Save / choice clicks to land.
-        if compact:
-            _make_click_through(title)
-        _emit("READY")
-        # Spawn the stdin reader once the window is up.
-        threading.Thread(
-            target=_stdin_reader, args=(window,), daemon=True
-        ).start()
-
-    window.events.shown += _on_shown
-
-    # webview.start() runs the GUI loop in this subprocess's main thread.
-    # Blocks until window.destroy() — which the CLOSE command triggers.
-    webview.start()
-
-    _emit("CLOSED")
+        # Catches anything escaping the GUI setup so we have a footprint
+        # in the log instead of just "subprocess vanished".
+        import traceback
+        _log("_run_subprocess_banner crashed:\n" + traceback.format_exc())
+        raise
 
 
 # ── parent-side wrapper ──────────────────────────────────────────────────
@@ -790,6 +909,11 @@ class StatusBanner:
         self._closed = threading.Event()
         self._ready = threading.Event()
         self._next_event = threading.Event()
+        # Distinguishes a real NEXT click from a subprocess-close that also
+        # has to unblock _next_event so waiters don't deadlock. Only the
+        # "NEXT" stdout event flips this to True; close-cleanup leaves it
+        # False so callers can tell the user dismissed the banner.
+        self._next_clicked = False
         self._choice_q: Queue = Queue()
         self._input_q: Queue = Queue()
 
@@ -799,7 +923,30 @@ class StatusBanner:
         if self._proc is not None or self._closed.is_set():
             return
 
-        args = [sys.executable, "-m", self._PROC_MODULE]
+        # In the Nuitka build, sys.executable is AutoUse.exe — a compiled C
+        # binary with no `-m` module loader. Running it with `-m …banner`
+        # silently re-execs the whole AutoUse app (Flask + main webview +
+        # Telegram bot), giving the user a second main window instead of
+        # the pill. Re-exec AutoUse.exe with --banner-mode so app.py's
+        # main() can route directly to _run_subprocess_banner. In dev
+        # (`python app.py`) sys.executable IS a python interpreter, so
+        # the old -m invocation still works and is preferred — it avoids
+        # the cost of bootstrapping app.py just to reach the banner.
+        # cwd: pin the subprocess to the binary's install dir in the compiled
+        # build so WebView2's native DLL loader resolves WebView2Loader.dll,
+        # WebBrowserInterop.x64.dll, etc. from the install folder regardless
+        # of what cwd the parent inherited (a Start-menu launch leaves cwd
+        # at the user's home dir; a shortcut can leave it anywhere). In dev
+        # mode cwd=None inherits the parent's, which is the repo root —
+        # matches the working behaviour.
+        cwd = None
+        if _IS_COMPILED:
+            exe_dir = os.path.dirname(sys.executable)
+            main_exe = os.path.join(exe_dir, "AutoUse.exe")
+            args = [main_exe, "--banner-mode"]
+            cwd = exe_dir
+        else:
+            args = [sys.executable, "-m", self._PROC_MODULE]
         if self._compact:
             args.append("--compact")
 
@@ -814,6 +961,7 @@ class StatusBanner:
                 stderr=None,
                 text=True,
                 bufsize=1,  # line-buffered
+                cwd=cwd,
                 # On Windows, hide the extra console window subprocess
                 # would otherwise spawn.
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
@@ -850,11 +998,17 @@ class StatusBanner:
             return True
         if self._proc is None:
             return True
+        # Banner already dismissed (subprocess gone) — don't pretend the
+        # user clicked Next. Callers use the False return to short-circuit
+        # the wizard instead of opening Edge / advancing steps.
+        if self._closed.is_set():
+            return False
+        self._next_clicked = False
         self._next_event.clear()
         self._send({"cmd": "SHOW_NEXT"})
-        signalled = self._next_event.wait(timeout=timeout)
+        self._next_event.wait(timeout=timeout)
         self._send({"cmd": "HIDE_NEXT"})
-        return signalled
+        return self._next_clicked
 
     def wait_for_choice(
         self, left_label: str, right_label: str, timeout=None
@@ -951,6 +1105,10 @@ class StatusBanner:
                 _stderr("banner subprocess READY — pill visible")
                 self._ready.set()
             elif event == "NEXT":
+                # Flag must be set BEFORE the Event so a waiter that wakes
+                # on _next_event.wait() reads the True value, not the
+                # default False left by the close-cleanup path below.
+                self._next_clicked = True
                 self._next_event.set()
             elif event == "CHOICE":
                 self._choice_q.put(msg.get("value", "left"))

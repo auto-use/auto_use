@@ -70,6 +70,11 @@ else:
 # Check if running as compiled binary (Nuitka)
 IS_COMPILED = getattr(sys, 'frozen', False) or '__compiled__' in dir()
 IS_CLI_SUBPROCESS = "--cli-mode" in sys.argv
+# Any re-exec of AutoUse.exe that should NOT overwrite the parent's debug log
+# or wipe the parent's scratchpad. --banner-mode pops the floating Telegram
+# pill (compiled-binary path — see banner.py:_IS_COMPILED branch). Treated
+# identically to --cli-mode at the bootstrap-suppression layer below.
+IS_SECONDARY_PROCESS = IS_CLI_SUBPROCESS or "--banner-mode" in sys.argv
 
 
 def app_data_dir() -> Path:
@@ -121,8 +126,9 @@ def debug_exception(context):
     debug_log(f"EXCEPTION in {context}:", "ERROR")
     debug_log(traceback.format_exc(), "ERROR")
 
-# Initialize log file on startup (only in compiled mode, not CLI subprocess)
-if IS_COMPILED and not IS_CLI_SUBPROCESS and DEBUG_LOG_PATH:
+# Initialize log file on startup (only in compiled mode, not in any
+# secondary subprocess — those would clobber the parent's log on every spawn)
+if IS_COMPILED and not IS_SECONDARY_PROCESS and DEBUG_LOG_PATH:
     try:
         with open(DEBUG_LOG_PATH, 'w', encoding='utf-8') as f:
             f.write(f"=== Auto Use Debug Log - Started {datetime.now()} ===\n")
@@ -134,8 +140,59 @@ if IS_COMPILED and not IS_CLI_SUBPROCESS and DEBUG_LOG_PATH:
         pass
 
 # =============================================================================
+# Banner subprocess stdio reconnection (MUST run before the std-fixup below)
+# =============================================================================
+# When AutoUse.exe is re-exec'd as a banner subprocess via --banner-mode, the
+# parent's subprocess.Popen wires fd 0 (stdin) and fd 1 (stdout) to the pipes
+# it uses to drive the wizard. But the binary is built as a Windows
+# GUI-subsystem app (--windows-console-mode=disable in windows_binary_build.py)
+# which means Python startup sets sys.stdin/sys.stdout to None — even though
+# the OS-level fds are valid pipe handles inherited from the parent. We have
+# to wrap those fds as text streams here, BEFORE the `if sys.stdout is None`
+# block below silently replaces stdin/stdout with /dev/null and permanently
+# severs the JSON-stdio protocol with the parent. Without this, the parent
+# never sees READY/NEXT/CHOICE/SAVE/CLOSED events, the subprocess's
+# _stdin_reader crashes on `for line in None`, and the entire banner wizard
+# auto-completes in milliseconds when the eventual subprocess crash unblocks
+# every wait_for_* event in the parent at once. (Symptom: pill flashes for a
+# few seconds, Edge opens, empty token gets persisted, AutoUse restarts.)
+if "--banner-mode" in sys.argv:
+    try:
+        # line_buffering on stdin doesn't really matter (we're the reader),
+        # but the explicit encoding stops a UTF-8/cp1252 mismatch from
+        # silently dropping non-ASCII wizard text.
+        sys.stdin = os.fdopen(0, "r", encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+    try:
+        # buffering=1 → line-buffered, so each `_emit()` JSON line reaches
+        # the parent immediately instead of sitting in a 4 KB block buffer.
+        sys.stdout = os.fdopen(1, "w", encoding="utf-8", errors="replace", buffering=1)
+    except Exception:
+        pass
+    if sys.stderr is None:
+        # sys.stderr is None in a Nuitka GUI-subsystem child. pywebview's
+        # webview/http.py has a self-heal shim, but it only runs after
+        # `import webview` — anything that writes to stderr before that
+        # (a stray print, an uncaught traceback) would crash the
+        # subprocess. Try the inherited fd 2; fall back to devnull so the
+        # attribute is never None.
+        try:
+            sys.stderr = os.fdopen(2, "w", encoding="utf-8", errors="replace", buffering=1)
+        except Exception:
+            try:
+                sys.stderr = open(os.devnull, "w", encoding="utf-8")
+            except Exception:
+                pass
+
+# =============================================================================
 # Fix for bundled app (MUST be before any print statements)
 # Skip when run from main.py / cli.py so terminal output is not buffered.
+# Also skip in --banner-mode: the subprocess already wired its stdio above and
+# re-wrapping orphans the original TextIOWrapper — its eventual GC closes
+# fd 1 in the subprocess (silently breaking the JSON protocol with the parent
+# after a few seconds), and the new wrapper also drops the line-buffering
+# we deliberately set with buffering=1.
 # =============================================================================
 
 def _entry_is_cli_script():
@@ -145,7 +202,7 @@ def _entry_is_cli_script():
     main_file = getattr(sys.modules['__main__'], '__file__', None) or ''
     return os.path.basename(main_file) in ('main.py', 'cli.py')
 
-if not _entry_is_cli_script():
+if not _entry_is_cli_script() and "--banner-mode" not in sys.argv:
     if sys.stdout is None:
         sys.stdout = open(os.devnull, 'w', encoding='utf-8')
     elif hasattr(sys.stdout, 'buffer'):
@@ -913,6 +970,28 @@ def _compute_window_center(win_w, win_h):
     return 600, 30
 
 def main():
+    # --banner-mode MUST be handled before anything else in main() — Flask,
+    # webview, Telegram bot, scratchpad cleanup, etc. all need to stay
+    # untouched in the banner subprocess. In dev (`python app.py`) the
+    # banner spawns via `python -m …banner`, but the Nuitka binary has no
+    # `-m` mode, so StatusBanner.show() re-execs AutoUse.exe with this
+    # flag instead. Without an early exit here, the banner subprocess
+    # would boot a second AutoUse webview, start a second Telegram bot,
+    # and race the parent for port 5000 + the milestone scratchpad. We
+    # check at the very top so even one stray scratchpad wipe / Flask
+    # bind can't happen. --compact is left in argv on purpose — it's
+    # read inside _run_subprocess_banner via `"--compact" in sys.argv`.
+    if "--banner-mode" in sys.argv and IS_WINDOWS:
+        sys.argv.remove("--banner-mode")
+        try:
+            from Auto_Use.windows_use.remote_connection.telegram.banner import (
+                _run_subprocess_banner,
+            )
+            _run_subprocess_banner()
+        except Exception:
+            debug_exception("Banner mode")
+        return
+
     # Wire the Telegram remote-control bot. Windows mounts a Flask blueprint
     # plus a polling bot; macOS just starts the polling bot (no blueprint yet —
     # token is read from .env / api_key.txt directly).
